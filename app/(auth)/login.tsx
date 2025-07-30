@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ScrollView,
   Image,
+  useWindowDimensions,
   ViewStyle,
   TextStyle,
   ImageStyle,
@@ -17,11 +18,48 @@ import { Colors } from '@/constants/Colors';
 import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
 import IcShowPass from '@/assets/images/ic_show_pass.png';
 import IcHidePass from '@/assets/images/ic_hide_pass.png';
-// Importar el nuevo logo y el icono de Google
 import TwiggLogo from '@/assets/images/twigg_logo.png';
 import IcGoogle from '@/assets/images/ic_google.png';
 
+// --- HeroPanel: Totalmente aislado y memoizado ---
+const HeroPanel = React.memo(() => (
+  <View style={styles.heroContainer}>
+    <Image
+      source={{ uri: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1200' }}
+      style={styles.heroImage}
+      resizeMode="cover"
+    />
+    <View style={styles.heroOverlay}>
+      <View style={styles.heroContent}>
+        <View style={styles.badgeContainer}>
+          <Text style={styles.badgeText}>APRENDIZAJE INTELIGENTE</Text>
+        </View>
+        <Text style={styles.heroTitle}>Transforma tu futuro</Text>
+        <Text style={styles.heroSubtitle}>
+          Cursos creados por expertos y potenciados por inteligencia artificial
+        </Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>10K+</Text>
+            <Text style={styles.statLabel}>Estudiantes</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>500+</Text>
+            <Text style={styles.statLabel}>Cursos</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>98%</Text>
+            <Text style={styles.statLabel}>Satisfacción</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+));
+HeroPanel.displayName = 'HeroPanel';
+
 export default function LoginScreen() {
+  const { height: windowHeight } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -32,171 +70,213 @@ export default function LoginScreen() {
   };
 
   const isValidEmail = email.includes('@') && email.includes('.');
-  const isFormValid = email && password && password.length >= 6;
+  const isFormValid = email.length > 0 && password.length >= 6;
+
+  // JSX del formulario
+  const Form = () => (
+    <View style={styles.form}>
+      {isSignUp && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Nombre completo</Text>
+          <TextInput
+            style={[
+              styles.input,
+              isWeb && isDesktop && styles.webInput,
+            ]}
+            placeholder="Tu nombre"
+            placeholderTextColor="#94a3b8"
+            onChangeText={() => {}}
+          />
+        </View>
+      )}
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={[
+            styles.input,
+            !isValidEmail && email.length > 0 && styles.inputError,
+            isWeb && isDesktop && styles.webInput,
+          ]}
+          placeholder="tu@email.com"
+          placeholderTextColor="#94a3b8"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Contraseña</Text>
+        <View
+          style={[
+            styles.passwordContainer,
+            password.length > 0 && password.length < 6 && styles.inputError,
+            isWeb && isDesktop && styles.webPasswordContainer,
+          ]}
+        >
+          <TextInput
+            style={[
+              styles.inputPassword,
+              isWeb && isDesktop && styles.webInput,
+            ]}
+            placeholder="Mínimo 6 caracteres"
+            placeholderTextColor="#94a3b8"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity
+            style={[
+              styles.eyeButton,
+              isWeb && isDesktop && styles.webEyeButton,
+            ]}
+            onPress={() => setShowPassword(!showPassword)}
+            focusable={false}
+            accessible={false}
+          >
+            <Image
+              source={showPassword ? IcHidePass : IcShowPass}
+              style={styles.eyeIconImage}
+            />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.errorContainer}>
+          {password.length > 0 && password.length < 6 ? (
+            <Text style={styles.errorText}>Mínimo 6 caracteres</Text>
+          ) : (
+            <Text style={[styles.errorText, styles.errorTextHidden]}>
+              Mínimo 6 caracteres
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {!isSignUp && (
+        <TouchableOpacity style={styles.forgotPasswordButton}>
+          <Text style={styles.forgotPasswordText}>
+            ¿Olvidaste tu contraseña?
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={[
+          styles.primaryButton,
+          !isFormValid && styles.primaryButtonDisabled,
+          isWeb && isDesktop && styles.webPrimaryButton,
+        ]}
+        onPress={handleAuth}
+        disabled={!isFormValid}
+      >
+        <Text style={styles.primaryButtonText}>
+          {isSignUp ? 'Crear cuenta' : 'Iniciar sesión'}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.dividerContainer}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>o</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity
+        style={[
+          styles.googleButton,
+          isWeb && isDesktop && styles.webGoogleButton,
+        ]}
+      >
+        <Image source={IcGoogle} style={styles.googleIcon} />
+        <Text style={styles.googleButtonText}>
+          Continuar con Google
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.toggleContainer,
+          isWeb && isDesktop && styles.webToggleContainer,
+        ]}
+        onPress={() => {
+          setIsSignUp(!isSignUp);
+          setEmail('');
+          setPassword('');
+        }}
+      >
+        <Text style={styles.toggleText}>
+          {isSignUp ? '¿Ya tienes cuenta? ' : '¿No tienes cuenta? '}
+          <Text style={styles.toggleTextBold}>
+            {isSignUp ? 'Inicia sesión' : 'Regístrate'}
+          </Text>
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {isWeb && isDesktop && (
-            <View style={styles.leftPanel}>
+      {isWeb && isDesktop ? (
+        <View style={styles.containerWeb}>
+          <View style={[styles.leftPanel, { height: windowHeight }]}>
+            <HeroPanel />
+          </View>
+          <ScrollView
+            style={[styles.formPanel, { height: windowHeight }]}
+            contentContainerStyle={styles.formScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.header, styles.webHeader]}>
               <Image
-                source={{ uri: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1200' }}
-                style={styles.heroImage}
+                source={TwiggLogo}
+                style={styles.logoImage}
+                resizeMode="contain"
               />
-              <View style={styles.heroOverlay}>
-                <View style={styles.heroContent}>
-                  <View style={styles.badgeContainer}>
-                    <Text style={styles.badgeText}>APRENDIZAJE INTELIGENTE</Text>
-                  </View>
-                  <Text style={styles.heroTitle}>Transforma tu futuro</Text>
-                  <Text style={styles.heroSubtitle}>
-                    Cursos creados por expertos y potenciados por inteligencia artificial
-                  </Text>
-                  <View style={styles.statsContainer}>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>10K+</Text>
-                      <Text style={styles.statLabel}>Estudiantes</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>500+</Text>
-                      <Text style={styles.statLabel}>Cursos</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>98%</Text>
-                      <Text style={styles.statLabel}>Satisfacción</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          )}
-          <View style={[styles.formPanel, isWeb && isDesktop && styles.webFormPanel]}>
-            <View style={[styles.header, isWeb && isDesktop && styles.webHeader]}>
-              {/* Reemplazar el logoContainer por una Image */}
-              <Image source={TwiggLogo} style={styles.logoImage} resizeMode="contain" />
               <Text style={styles.title}>Twigg</Text>
               <Text style={styles.subtitle}>
-                {isSignUp ? 'Crea tu cuenta gratuita' : 'Bienvenido de nuevo'}
+                {isSignUp
+                  ? 'Crea tu cuenta gratuita'
+                  : 'Bienvenido de nuevo'}
               </Text>
             </View>
-            <View style={[styles.form, isWeb && isDesktop && styles.webForm]}>
-              {isSignUp && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nombre completo</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Tu nombre"
-                    placeholderTextColor="#94a3b8"
-                    onChangeText={(text) => console.log(text)}
-                  />
-                </View>
-              )}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    !isValidEmail && email.length > 0 && styles.inputError,
-                  ]}
-                  placeholder="tu@email.com"
-                  placeholderTextColor="#94a3b8"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
+            <Form />
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <View style={styles.formPanel}>
+              <View style={styles.header}>
+                <Image
+                  source={TwiggLogo}
+                  style={styles.logoImage}
+                  resizeMode="contain"
                 />
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Contraseña</Text>
-                <View
-                  style={[
-                    styles.passwordContainer,
-                    password.length > 0 && password.length < 6 && styles.inputError,
-                  ]}
-                >
-                  <TextInput
-                    style={styles.inputPassword}
-                    placeholder="Mínimo 6 caracteres"
-                    placeholderTextColor="#94a3b8"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => setShowPassword(!showPassword)}
-                    focusable={false}
-                    accessible={false}
-                  >
-                    <Image
-                      source={showPassword ? IcHidePass : IcShowPass}
-                      style={styles.eyeIconImage}
-                    />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.errorContainer}>
-                  {password.length > 0 && password.length < 6 ? (
-                    <Text style={styles.errorText}>Mínimo 6 caracteres</Text>
-                  ) : (
-                    <Text style={[styles.errorText, styles.errorTextHidden]}>Mínimo 6 caracteres</Text>
-                  )}
-                </View>
-              </View>
-              {!isSignUp && (
-                <TouchableOpacity style={styles.forgotPasswordButton}>
-                  <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.primaryButton, !isFormValid && styles.primaryButtonDisabled]}
-                onPress={handleAuth}
-                disabled={!isFormValid}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {isSignUp ? 'Crear cuenta' : 'Iniciar sesión'}
+                <Text style={styles.title}>Twigg</Text>
+                <Text style={styles.subtitle}>
+                  {isSignUp
+                    ? 'Crea tu cuenta gratuita'
+                    : 'Bienvenido de nuevo'}
                 </Text>
-              </TouchableOpacity>
-              <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>o</Text>
-                <View style={styles.dividerLine} />
               </View>
-              {/* Reemplazar los botones sociales por un único botón de Google */}
-              <TouchableOpacity style={styles.googleButton}>
-                <Image source={IcGoogle} style={styles.googleIcon} />
-                <Text style={styles.googleButtonText}>Continuar con Google</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleContainer, isWeb && isDesktop && styles.webToggleContainer]}
-                onPress={() => {
-                  setIsSignUp(!isSignUp);
-                  setEmail('');
-                  setPassword('');
-                }}
-              >
-                <Text style={styles.toggleText}>
-                  {isSignUp ? '¿Ya tienes cuenta? ' : '¿No tienes cuenta? '}
-                  <Text style={styles.toggleTextBold}>
-                    {isSignUp ? 'Inicia sesión' : 'Regístrate'}
-                  </Text>
-                </Text>
-              </TouchableOpacity>
+              <Form />
             </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 interface Styles {
   container: ViewStyle;
+  containerWeb: ViewStyle;
   scrollContent: ViewStyle;
   content: ViewStyle;
+  heroContainer: ViewStyle;
   leftPanel: ViewStyle;
   heroImage: ImageStyle;
   heroOverlay: ViewStyle;
@@ -210,16 +290,13 @@ interface Styles {
   statNumber: TextStyle;
   statLabel: TextStyle;
   formPanel: ViewStyle;
-  webFormPanel: ViewStyle; // Nuevo estilo para web
+  formScrollContent: ViewStyle;
+  webHeader: ViewStyle;
   header: ViewStyle;
-  webHeader: ViewStyle; // Nuevo estilo para web
-  // logoContainer: ViewStyle; // Eliminado
-  // logoEmoji: TextStyle; // Eliminado
-  logoImage: ImageStyle; // Nuevo
+  logoImage: ImageStyle;
   title: TextStyle;
   subtitle: TextStyle;
   form: ViewStyle;
-  webForm: ViewStyle; // Nuevo estilo para web
   inputGroup: ViewStyle;
   label: TextStyle;
   input: TextStyle;
@@ -239,17 +316,20 @@ interface Styles {
   dividerContainer: ViewStyle;
   dividerLine: ViewStyle;
   dividerText: TextStyle;
-  // socialButtonsContainer: ViewStyle; // Eliminado
-  // socialButton: ViewStyle; // Eliminado
-  // socialIcon: TextStyle; // Eliminado
-  // Nuevos estilos para el botón de Google
   googleButton: ViewStyle;
   googleIcon: ImageStyle;
   googleButtonText: TextStyle;
   toggleContainer: ViewStyle;
-  webToggleContainer: ViewStyle; // Nuevo estilo para web
+  webToggleContainer: ViewStyle;
   toggleText: TextStyle;
   toggleTextBold: TextStyle;
+
+  // Overrides para web/desktop: aún más compactos
+  webInput: ViewStyle;
+  webPasswordContainer: ViewStyle;
+  webPrimaryButton: ViewStyle;
+  webGoogleButton: ViewStyle;
+  webEyeButton: ViewStyle;
 }
 
 const styles = StyleSheet.create<Styles>({
@@ -257,26 +337,34 @@ const styles = StyleSheet.create<Styles>({
     flex: 1,
     backgroundColor: '#fff',
   },
+  containerWeb: {
+    flexDirection: 'row',
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
+  },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    flexDirection: isWeb && isDesktop ? 'row' : 'column',
-    maxWidth: isWeb && isDesktop ? 1200 : '100%',
-    alignSelf: 'center',
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
   },
   leftPanel: {
-    flex: 1,
+    width: '50%',
     position: 'relative',
-    minHeight: isWeb && isDesktop ? 'auto' : 300, // O '100%'
-    display: isWeb && isDesktop ? 'flex' : 'none',
   },
   heroImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    transform: [{ translateZ: 0 }],
   },
   heroOverlay: {
     position: 'absolute',
@@ -284,7 +372,7 @@ const styles = StyleSheet.create<Styles>({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: getSpacing('lg'),
@@ -294,7 +382,7 @@ const styles = StyleSheet.create<Styles>({
     maxWidth: 500,
   },
   badgeContainer: {
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    backgroundColor: 'rgba(139,92,246,0.2)',
     borderColor: '#8b5cf6',
     borderWidth: 1,
     paddingHorizontal: getSpacing('md'),
@@ -328,7 +416,7 @@ const styles = StyleSheet.create<Styles>({
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
     padding: getSpacing('lg'),
     backdropFilter: 'blur(10px)',
@@ -347,39 +435,28 @@ const styles = StyleSheet.create<Styles>({
     color: '#cbd5e1',
     fontWeight: '500',
   },
-  // Cambio: Ajustes en formPanel para web
   formPanel: {
     flex: 1,
-    // Eliminado: justifyContent: 'center',
-    padding: getSpacing('lg'), // Mantener padding horizontal
-    maxWidth: isWeb && isDesktop ? 400 : '100%',
-    alignSelf: 'center',
-    minHeight: isWeb && isDesktop ? 'auto' : 'auto', // O '100%'
+    padding: getSpacing('lg'),
+    maxWidth: 400,
     backgroundColor: Colors.white,
     width: '100%',
   },
-  // Nuevo estilo específico para web en formPanel
-  webFormPanel: {
-    // Reducir padding vertical en web
-    paddingTop: getSpacing('md'), // Menos que el padding original de 'lg'
-    paddingBottom: getSpacing('md'), // Menos que el padding original de 'lg'
+  formScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: getSpacing('xl'), // Mantener espacio por defecto
-    marginTop: isWeb ? 0 : getSpacing('lg'),
+    marginBottom: getSpacing('xl'),
+    marginTop: 0,
   },
-  // Nuevo estilo específico para web en header
   webHeader: {
-    // Reducir el margen inferior en web
-    marginBottom: getSpacing('md'), // Menos que el margen original de 'xl'
+    marginBottom: getSpacing('md'),
   },
-  // logoContainer: { ... }, // Eliminado
-  // logoEmoji: { ... }, // Eliminado
-  // Nuevo estilo para la imagen del logo
   logoImage: {
-    width: 80, // Ajusta el tamaño según tus necesidades
-    height: 80, // Ajusta el tamaño según tus necesidades
+    width: 80,
+    height: 80,
     marginBottom: getSpacing('sm'),
   },
   title: {
@@ -395,12 +472,7 @@ const styles = StyleSheet.create<Styles>({
     fontWeight: '500',
   },
   form: {
-    gap: getSpacing('md'), // Mantener gap por defecto
-  },
-  // Nuevo estilo específico para web en form
-  webForm: {
-    // Reducir el gap entre elementos en web
-    gap: getSpacing('sm'), // Menos que el gap original de 'md'
+    gap: getSpacing('md'),
   },
   inputGroup: {
     gap: getSpacing('xs'),
@@ -427,7 +499,6 @@ const styles = StyleSheet.create<Styles>({
     elevation: 1,
   },
   inputError: {
-    borderWidth: 2,
     borderColor: '#f87171',
     backgroundColor: '#fff1f1',
   },
@@ -460,22 +531,16 @@ const styles = StyleSheet.create<Styles>({
     height: 24,
     tintColor: '#64748b',
   },
-  // Nuevo: Contenedor de errores con espacio reservado
   errorContainer: {
-    minHeight: 20, // Ajusta este valor según la altura típica de tu mensaje de error
-    // paddingTop: 2,
-    // paddingBottom: 2,
+    minHeight: 20,
   },
   errorText: {
     color: '#f87171',
     fontSize: getFontSize('xs'),
     marginLeft: getSpacing('sm'),
-    // marginTop: 2, // Ya no es necesario si usamos minHeight en el contenedor
   },
-  // Nuevo: Estilo para ocultar el texto de error pero mantener el espacio
   errorTextHidden: {
     opacity: 0,
-    // O alternativamente: color: 'transparent'
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',
@@ -526,21 +591,17 @@ const styles = StyleSheet.create<Styles>({
     fontSize: getFontSize('sm'),
     fontWeight: '500',
   },
-  // socialButtonsContainer: { ... }, // Eliminado
-  // socialButton: { ... }, // Eliminado
-  // socialIcon: { ... }, // Eliminado
-  // Nuevos estilos para el botón de Google
   googleButton: {
-    flexDirection: 'row', // Colocar icono y texto en fila
-    alignItems: 'center', // Centrar verticalmente
-    justifyContent: 'center', // Centrar horizontalmente el contenido combinado
-    backgroundColor: '#fff', // Fondo blanco típico para Google
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#e2e8f0', // Borde sutil
+    borderColor: '#e2e8f0',
     borderRadius: 12,
-    paddingVertical: getSpacing('md'), // Mismo padding vertical que primaryButton
-    paddingHorizontal: getSpacing('md'), // Mismo padding horizontal
-    minHeight: 52, // Mismo minHeight que primaryButton
+    paddingVertical: getSpacing('md'),
+    paddingHorizontal: getSpacing('md'),
+    minHeight: 52,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -548,26 +609,22 @@ const styles = StyleSheet.create<Styles>({
     elevation: 1,
   },
   googleIcon: {
-    width: 20, // Ajustar tamaño del icono si es necesario
-    height: 20, // Ajustar tamaño del icono si es necesario
-    marginRight: getSpacing('sm'), // Espacio entre el icono y el texto
+    width: 20,
+    height: 20,
+    marginRight: getSpacing('sm'),
   },
   googleButtonText: {
     fontSize: getFontSize('md'),
     fontWeight: '600',
-    color: '#374151', // Color de texto oscuro, típico para botones de Google
+    color: '#374151',
   },
   toggleContainer: {
     alignItems: 'center',
     padding: getSpacing('md'),
-    marginTop: getSpacing('sm'), // Mantener margen por defecto
+    marginTop: getSpacing('sm'),
   },
-  // Nuevo estilo específico para web en toggleContainer
   webToggleContainer: {
-    // Reducir el margen superior en web
-    marginTop: getSpacing('xs'), // Menos que el margen original de 'sm'
-    // Opcional: paddingVertical reducido
-    // paddingVertical: getSpacing('sm'),
+    marginTop: getSpacing('xs'),
   },
   toggleText: {
     color: '#64748b',
@@ -578,5 +635,25 @@ const styles = StyleSheet.create<Styles>({
   toggleTextBold: {
     color: '#8b5cf6',
     fontWeight: '600',
+  },
+
+  // Overrides para web/desktop: aún más compactos
+  webInput: {
+    padding: getSpacing('xs'),
+    minHeight: 36,
+  },
+  webPasswordContainer: {
+    minHeight: 36,
+  },
+  webPrimaryButton: {
+    padding: getSpacing('xs'),
+    minHeight: 36,
+  },
+  webGoogleButton: {
+    paddingVertical: getSpacing('xs'),
+    minHeight: 36,
+  },
+  webEyeButton: {
+    padding: getSpacing('xs'),
   },
 });
