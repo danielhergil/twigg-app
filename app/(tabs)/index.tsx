@@ -30,8 +30,31 @@ import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
 import { dummyUser, myCourses, featuredCourses } from '@/data/dummyData';
 import CourseCard from '@/components/CourseCard';
 import TwiggLogo from '@/assets/images/twigg_logo.png';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/config/firebase';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
+
+const handleLogout = async () => {
+  try {
+    // 1) Firebase
+    await signOut(auth);
+
+    // 2) Si usas GoogleSignin en móvil, limpia también su estado
+    if (!isWeb) {
+      await GoogleSignin.signOut();
+      // opcional: await GoogleSignin.revokeAccess();
+    }
+
+    // 3) Redirige a login
+    router.replace('/login');
+  } catch (e: any) {
+    console.error('Error al cerrar sesión:', e);
+    alert('No se pudo cerrar sesión. Intenta de nuevo.');
+  }
+};
 
 export default function DashboardScreen() {
   // --- Componentes Reutilizables ---
@@ -214,7 +237,7 @@ export default function DashboardScreen() {
             </View>
           </View>
           <TouchableOpacity style={styles.logoutButton}>
-            <LogOut size={20} color={Colors.danger} />
+            <LogOut size={20} color={Colors.danger} onPress={handleLogout} />
           </TouchableOpacity>
         </View>
       </View>
