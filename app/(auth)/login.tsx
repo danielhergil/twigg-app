@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,12 @@ import IcShowPass from '@/assets/images/ic_show_pass.png';
 import IcHidePass from '@/assets/images/ic_hide_pass.png';
 import TwiggLogo from '@/assets/images/twigg_logo.png';
 import IcGoogle from '@/assets/images/ic_google.png';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { signInWithPopup } from 'firebase/auth';
+
+// --- Firebase imports ---
+import { auth } from '@/config/firebase'; // Asegúrate de crear este archivo
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 
 // --- HeroPanel: Totalmente aislado y memoizado ---
 const HeroPanel = React.memo(() => (
@@ -65,12 +71,56 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Configurar Google Sign-In al montar el componente
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '1091750318583-4k6s5g8ffgctkapj5enskvam454m3ch7.apps.googleusercontent.com', // 👈 Reemplaza con tu Web Client ID
+      offlineAccess: true,
+    });
+  }, []);
+
   const handleAuth = () => {
     router.replace('/(tabs)');
   };
 
   const isValidEmail = email.includes('@') && email.includes('.');
   const isFormValid = email.length > 0 && password.length >= 6;
+
+  // --- Google Sign-In Handler ---
+  const handleGoogleSignIn = async () => {
+  try {
+    if (!isWeb) {
+      // --- ANDROID / iOS: Usar react-native-google-signin ---
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data?.idToken;
+
+      if (!idToken) {
+        throw new Error('No se obtuvo el ID token de Google');
+      }
+
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
+    } else {
+      // --- WEB: Usar Firebase directamente con popup ---
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    }
+
+    // ✅ Login exitoso
+    router.replace('/(tabs)');
+  } catch (error: any) {
+    console.error('Error en login con Google:', error);
+
+    if (error.code === 'auth/popup-closed-by-user') {
+      console.log('Popup cerrado por el usuario');
+    } else if (error.code === 'auth/web-storage-unsupported') {
+      alert('Habilita las cookies. No funciona en modo incógnito.');
+    } else {
+      alert('Error al iniciar sesión con Google. Intenta de nuevo.');
+    }
+  }
+};
 
   // JSX del formulario
   const Form = () => (
@@ -89,7 +139,6 @@ export default function LoginScreen() {
           />
         </View>
       )}
-
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Email</Text>
         <TextInput
@@ -106,7 +155,6 @@ export default function LoginScreen() {
           autoCapitalize="none"
         />
       </View>
-
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Contraseña</Text>
         <View
@@ -152,7 +200,6 @@ export default function LoginScreen() {
           )}
         </View>
       </View>
-
       {!isSignUp && (
         <TouchableOpacity style={styles.forgotPasswordButton}>
           <Text style={styles.forgotPasswordText}>
@@ -160,7 +207,6 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       )}
-
       <TouchableOpacity
         style={[
           styles.primaryButton,
@@ -174,25 +220,23 @@ export default function LoginScreen() {
           {isSignUp ? 'Crear cuenta' : 'Iniciar sesión'}
         </Text>
       </TouchableOpacity>
-
       <View style={styles.dividerContainer}>
         <View style={styles.dividerLine} />
         <Text style={styles.dividerText}>o</Text>
         <View style={styles.dividerLine} />
       </View>
-
       <TouchableOpacity
         style={[
           styles.googleButton,
           isWeb && isDesktop && styles.webGoogleButton,
         ]}
+        onPress={handleGoogleSignIn} // 🔥 Botón conectado
       >
         <Image source={IcGoogle} style={styles.googleIcon} />
         <Text style={styles.googleButtonText}>
           Continuar con Google
         </Text>
       </TouchableOpacity>
-
       <TouchableOpacity
         style={[
           styles.toggleContainer,
@@ -323,8 +367,6 @@ interface Styles {
   webToggleContainer: ViewStyle;
   toggleText: TextStyle;
   toggleTextBold: TextStyle;
-
-  // Overrides para web/desktop: aún más compactos
   webInput: ViewStyle;
   webPasswordContainer: ViewStyle;
   webPrimaryButton: ViewStyle;
@@ -636,8 +678,6 @@ const styles = StyleSheet.create<Styles>({
     color: '#8b5cf6',
     fontWeight: '600',
   },
-
-  // Overrides para web/desktop: aún más compactos
   webInput: {
     padding: getSpacing('xs'),
     minHeight: 36,

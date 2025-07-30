@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "twigg",
+    "slug": "twigg",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "twigg",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -25,7 +25,14 @@
       "typedRoutes": true
     },
     "android": {
-      "package": "com.daniel.hergil.boltexponativewind"
+      "package": "com.twigg.app",
+      "googleServicesFile": "./google‑services.json"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7a9ea2a3-cfd9-47f2-af26-cccda8bac6cf"
+      }
     }
   }
 }
