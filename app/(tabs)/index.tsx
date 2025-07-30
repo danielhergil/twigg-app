@@ -204,9 +204,9 @@ export default function DashboardScreen() {
         <View style={styles.sidebarFooter}>
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
-              <Text style={styles.userInitials}>
-                {dummyUser.name.split(' ').map((n) => n[0]).join('')}
-              </Text>
+              <TouchableOpacity style={styles.profileButton}>
+                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarEmail} />
+              </TouchableOpacity>
             </View>
             <View style={styles.userText}>
               <Text style={styles.userName}>{dummyUser.name}</Text>
@@ -465,7 +465,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -737,7 +736,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -768,5 +766,12 @@ const styles = StyleSheet.create({
     marginBottom: getSpacing('md'),
     marginTop: 50,
     marginRight: 40
+  },
+  webAvatarEmail: {
+    width: 40,
+    height: 40,
+    borderRadius: 50,
+    marginBottom: getSpacing('md'),
+    marginTop: 30
   },
 });
