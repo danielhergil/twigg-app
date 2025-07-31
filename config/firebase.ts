@@ -1,6 +1,6 @@
-// src/config/firebase.web.ts
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import Constants from 'expo-constants';
 
 const {
@@ -11,7 +11,7 @@ const {
   firebaseMessagingSenderId,
   firebaseAppId,
   firebaseMeasurementId,
-} = (Constants.expoConfig?.extra ?? {}) as Record<string,string>;
+} = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
 
 const firebaseConfig = {
   apiKey: firebaseApiKey,
@@ -25,3 +25,4 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);

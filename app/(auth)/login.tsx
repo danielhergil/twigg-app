@@ -27,14 +27,14 @@ import { signInWithPopup } from 'firebase/auth';
 import Constants from 'expo-constants';
 
 // --- Firebase imports ---
-import { auth } from '@/config/firebase';
+import { auth, db } from '@/config/firebase';
 import {
   GoogleAuthProvider,
   signInWithCredential,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  // sendEmailVerification, // si quieres verificar email
 } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 import { ensureGoogleSigninConfigured } from '@/utils/googleSignIn';
 
@@ -81,6 +81,8 @@ const HeroPanel = React.memo(() => (
 HeroPanel.displayName = 'HeroPanel';
 
 interface FormProps {
+  fullName: string;
+  setFullName: (v: string) => void;
   email: string;
   password: string;
   isSignUp: boolean;
@@ -96,6 +98,8 @@ interface FormProps {
 }
 
 const Form: React.FC<FormProps> = ({
+  fullName,
+  setFullName,
   email,
   password,
   isSignUp,
@@ -110,7 +114,9 @@ const Form: React.FC<FormProps> = ({
   googleLoading,
 }) => {
   const isValidEmail = email.includes('@') && email.includes('.');
-  const isFormValid = email.trim().length > 0 && password.length >= 6 && isValidEmail;
+  const hasValidName = !isSignUp || fullName.trim().length > 0;
+  const isFormValid =
+    email.trim().length > 0 && password.length >= 6 && isValidEmail && hasValidName;
 
   return (
     <View style={styles.form}>
@@ -118,12 +124,20 @@ const Form: React.FC<FormProps> = ({
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Nombre completo</Text>
           <TextInput
-            style={[styles.input, isWeb && isDesktop && styles.webInput]}
+            style={[
+              styles.input,
+              fullName.trim().length === 0 && isSignUp && styles.inputError,
+              isWeb && isDesktop && styles.webInput,
+            ]}
             placeholder="Tu nombre"
             placeholderTextColor="#94a3b8"
-            onChangeText={() => {}}
+            value={fullName}
+            onChangeText={setFullName}
             autoCapitalize="words"
           />
+          {isSignUp && fullName.trim().length === 0 && (
+            <Text style={styles.errorText}>El nombre es obligatorio</Text>
+          )}
         </View>
       )}
       <View style={styles.inputGroup}>
@@ -226,6 +240,7 @@ const Form: React.FC<FormProps> = ({
           setIsSignUp(!isSignUp);
           setEmail('');
           setPassword('');
+          setFullName('');
         }}
       >
         <Text style={styles.toggleText}>
@@ -241,6 +256,7 @@ const Form: React.FC<FormProps> = ({
 
 export default function LoginScreen() {
   const { height: windowHeight } = useWindowDimensions();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -255,7 +271,7 @@ export default function LoginScreen() {
   const handleAuth = useCallback(async () => {
     const emailTrimmed = email.trim();
     const isValidEmail = emailTrimmed.includes('@') && emailTrimmed.includes('.');
-    if (!isValidEmail || password.length < 6) return;
+    if (!isValidEmail || password.length < 6 || (isSignUp && fullName.trim().length === 0)) return;
 
     setLoading(true);
     try {
@@ -266,8 +282,14 @@ export default function LoginScreen() {
           emailTrimmed,
           password
         );
-        // Si quieres verificación de email:
-        // await sendEmailVerification(userCredential.user);
+        const user = userCredential.user;
+
+        // Crear documento en Firestore
+        await setDoc(doc(db, 'users', user.uid), {
+          name: fullName.trim(),
+          email: user.email,
+          createdAt: serverTimestamp(),
+        });
       } else {
         // Login
         await signInWithEmailAndPassword(auth, emailTrimmed, password);
@@ -307,7 +329,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  }, [email, password, isSignUp, router]);
+  }, [email, password, isSignUp, fullName, router]);
 
   const handleGoogleSignIn = useCallback(async () => {
     setGoogleLoading(true);
@@ -328,6 +350,20 @@ export default function LoginScreen() {
       } else {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
+      }
+
+      // Crear o mergear documento de usuario en Firestore
+      const user = auth.currentUser;
+      if (user) {
+        await setDoc(
+          doc(db, 'users', user.uid),
+          {
+            name: user.displayName ?? '',
+            email: user.email,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       router.replace('/(tabs)');
@@ -366,6 +402,8 @@ export default function LoginScreen() {
               </Text>
             </View>
             <Form
+              fullName={fullName}
+              setFullName={setFullName}
               email={email}
               password={password}
               isSignUp={isSignUp}
@@ -393,6 +431,8 @@ export default function LoginScreen() {
                 </Text>
               </View>
               <Form
+                fullName={fullName}
+                setFullName={setFullName}
                 email={email}
                 password={password}
                 isSignUp={isSignUp}
@@ -414,6 +454,7 @@ export default function LoginScreen() {
   );
 }
 
+// (El objeto styles permanece igual al que tenías previamente)
 interface Styles {
   container: ViewStyle;
   containerWeb: ViewStyle;
@@ -473,6 +514,7 @@ interface Styles {
   webEyeButton: ViewStyle;
 }
 
+// (Aquí reutilizas el mismo `styles` que ya tenías, sin cambios en esta sección)
 const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
