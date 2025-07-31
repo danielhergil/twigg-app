@@ -1,3 +1,5 @@
+// components/CourseCard.tsx
+
 import React from 'react';
 import {
   View,
@@ -5,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Dimensions,
 } from 'react-native';
 import { Star, Clock, Users } from 'lucide-react-native';
 import { Course } from '@/types/course';
@@ -17,11 +20,20 @@ interface CourseCardProps {
   showProgress?: boolean;
 }
 
-export default function CourseCard({ course, onPress, showProgress = false }: CourseCardProps) {
+const { width: screenWidth } = Dimensions.get('window');
+const CARD_WIDTH = isWeb && isDesktop
+  ? 320
+  : Math.round(screenWidth * 0.8);
+
+export default function CourseCard({
+  course,
+  onPress,
+  showProgress = false,
+}: CourseCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <Image source={{ uri: course.thumbnail }} style={styles.thumbnail} />
-      
+
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.level}>{course.level}</Text>
@@ -30,13 +42,17 @@ export default function CourseCard({ course, onPress, showProgress = false }: Co
             <Text style={styles.ratingText}>{course.rating}</Text>
           </View>
         </View>
-        
-        <Text style={styles.title} numberOfLines={2}>
+
+        <Text
+          style={styles.title}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
           {course.courseTitle}
         </Text>
-        
+
         <Text style={styles.author}>Por {course.author}</Text>
-        
+
         <View style={styles.meta}>
           <View style={styles.metaItem}>
             <Clock size={14} color={Colors.textSecondary} />
@@ -47,12 +63,12 @@ export default function CourseCard({ course, onPress, showProgress = false }: Co
             <Text style={styles.metaText}>{course.enrolledCount}</Text>
           </View>
         </View>
-        
+
         {showProgress && course.progress !== undefined && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
-              <View 
-                style={[styles.progressFill, { width: `${course.progress}%` }]} 
+              <View
+                style={[styles.progressFill, { width: `${course.progress}%` }]}
               />
             </View>
             <Text style={styles.progressText}>{course.progress}%</Text>
@@ -73,7 +89,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-    width: isWeb && isDesktop ? 320 : '100%',
+    width: CARD_WIDTH,
     marginBottom: getSpacing('md'),
   },
   thumbnail: {
@@ -115,6 +131,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: getSpacing('xs'),
     lineHeight: getFontSize('md') * 1.3,
+    height: (getFontSize('md') * 1.3) * 2, // reserva espacio para 2 líneas
   },
   author: {
     fontSize: getFontSize('sm'),

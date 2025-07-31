@@ -34,46 +34,51 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { router } from 'expo-router';
-
 const { width } = Dimensions.get('window');
-
+// --- Colores Vibrantes Personalizados ---
+const VibrantColors = {
+  primary: '#7e22ce', // Morado más intenso
+  secondary: '#f59e0b', // Ámbar
+  accent: '#ec4899', // Rosa
+  success: '#10b981', // Verde esmeralda
+  danger: '#ef4444', // Rojo
+  backgroundSecondary: '#f8fafc', // Fondo muy claro
+  surface: '#ffffff', // Blanco puro para tarjetas
+  text: '#1e293b', // Gris oscuro
+  textSecondary: '#64748b', // Gris medio
+  borderLight: '#cbd5e1', // Gris claro para bordes
+  shadow: '#000000', // Sombra más oscura
+  sidebarBackground: 'rgba(126, 34, 206, 0.1)', // Fondo del sidebar más intenso
+  headerBackground: 'rgba(126, 34, 206, 0.2)', // Fondo del header más intenso
+};
 const handleLogout = async () => {
   try {
-    // 1) Firebase
     await signOut(auth);
-
-    // 2) Si usas GoogleSignin en móvil, limpia también su estado
     if (!isWeb) {
       await GoogleSignin.signOut();
-      // opcional: await GoogleSignin.revokeAccess();
     }
-
-    // 3) Redirige a login
     router.replace('/login');
   } catch (e: any) {
     console.error('Error al cerrar sesión:', e);
     alert('No se pudo cerrar sesión. Intenta de nuevo.');
   }
 };
-
 export default function DashboardScreen() {
-  // --- Componentes Reutilizables ---
   const StatCard = ({ icon: Icon, title, value, color, description }: any) => (
     <View style={[styles.statCard, isWeb && isDesktop && styles.statCardWeb]}>
-      <View style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}>
+      <View style={[styles.statIconContainer, { backgroundColor: `${color}30` }]}>
         <Icon size={24} color={color} />
       </View>
       <View style={styles.statTextContainer}>
-        <Text style={styles.statValue}>{value}</Text>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
         <Text style={styles.statTitle}>{title}</Text>
         {description && <Text style={styles.statDescription}>{description}</Text>}
       </View>
     </View>
   );
-
   const Achievement = ({ achievement }: any) => (
     <View style={styles.achievementItem}>
-      <View style={[styles.achievementIconContainer, { backgroundColor: `${achievement.color}20` }]}>
+      <View style={[styles.achievementIconContainer, { backgroundColor: `${achievement.color}30` }]}>
         <Text style={[styles.achievementIcon, { color: achievement.color }]}>
           {achievement.icon}
         </Text>
@@ -83,12 +88,11 @@ export default function DashboardScreen() {
         <Text style={styles.achievementDescription}>{achievement.description}</Text>
       </View>
       <View style={styles.achievementPoints}>
-        <Trophy size={16} color={Colors.secondary} />
+        <Trophy size={16} color={VibrantColors.secondary} />
         <Text style={styles.achievementPointsText}>{achievement.points} pts</Text>
       </View>
     </View>
   );
-
   const ProgressRing = ({ progress, size = 60, strokeWidth = 6 }: any) => (
     <View style={[styles.progressRingContainer, { width: size, height: size }]}>
       <svg width={size} height={size} style={styles.progressRingSvg}>
@@ -96,7 +100,7 @@ export default function DashboardScreen() {
           cx={size / 2}
           cy={size / 2}
           r={size / 2 - strokeWidth / 2}
-          stroke={Colors.borderLight}
+          stroke={VibrantColors.borderLight}
           strokeWidth={strokeWidth}
           fill="transparent"
         />
@@ -104,7 +108,7 @@ export default function DashboardScreen() {
           cx={size / 2}
           cy={size / 2}
           r={size / 2 - strokeWidth / 2}
-          stroke={Colors.primary}
+          stroke={VibrantColors.primary}
           strokeWidth={strokeWidth}
           fill="transparent"
           strokeLinecap="round"
@@ -120,44 +124,41 @@ export default function DashboardScreen() {
       </View>
     </View>
   );
-
-  // --- Secciones Principales ---
   const renderStatsSection = () => (
-    <View style={styles.webSection}>
+    <View style={[styles.webSection, styles.statsSectionWeb]}>
       <Text style={styles.webSectionTitle}>Estadísticas</Text>
       <View style={styles.statsGrid}>
         <StatCard
           icon={BookOpen}
           title="Completados"
           value={dummyUser.coursesCompleted}
-          color={Colors.success}
+          color={VibrantColors.success}
           description="Cursos finalizados"
         />
         <StatCard
           icon={Clock}
           title="En progreso"
           value={dummyUser.coursesInProgress}
-          color={Colors.primary}
+          color={VibrantColors.primary}
           description="Cursos activos"
         />
         <StatCard
           icon={Target}
           title="Creados"
           value={dummyUser.coursesCreated}
-          color={Colors.accent}
+          color={VibrantColors.accent}
           description="Tus contribuciones"
         />
         <StatCard
           icon={Trophy}
           title="Puntos"
           value={dummyUser.totalPoints}
-          color={Colors.secondary}
+          color={VibrantColors.secondary}
           description="Logros obtenidos"
         />
       </View>
     </View>
   );
-
   const renderCoursesSection = (title: string, courses: any[], showProgress = false) => (
     <View style={styles.webSection}>
       <Text style={styles.webSectionTitle}>{title}</Text>
@@ -175,7 +176,6 @@ export default function DashboardScreen() {
       </ScrollView>
     </View>
   );
-
   const renderAchievementsSection = () => (
     <View style={styles.webSection}>
       <Text style={styles.webSectionTitle}>Tus Logros</Text>
@@ -186,16 +186,15 @@ export default function DashboardScreen() {
       </View>
     </View>
   );
-
-  // --- Menú de Navegación ---
-  const NavigationItem = ({ icon: Icon, label, isActive = false }: any) => (
-    <TouchableOpacity style={[styles.navItem, isActive && styles.navItemActive]}>
-      <Icon size={20} color={isActive ? Colors.white : Colors.textSecondary} />
+  const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) => (
+    <TouchableOpacity
+      style={[styles.navItem, isActive && styles.navItemActive]}
+      onPress={onPress}
+    >
+      <Icon size={20} color={isActive ? VibrantColors.surface : VibrantColors.textSecondary} />
       <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{label}</Text>
     </TouchableOpacity>
   );
-
-  // --- Layout para Web/Desktop con Sidebar Scrollable ---
   const renderWeb = () => (
     <View style={styles.webContainer}>
       <View style={styles.webSidebar}>
@@ -203,27 +202,22 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.webSidebarContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header Logo */}
           <View style={styles.webSidebarHeader}>
             <View style={styles.sidebarLogoContainer}>
               <Image source={TwiggLogo} style={styles.sidebarLogo} resizeMode="contain" />
               <Text style={styles.sidebarTitle}>Twigg</Text>
             </View>
           </View>
-
-          {/* Navegación */}
           <View style={styles.navigationMenu}>
-            <NavigationItem icon={Home} label="Inicio" isActive />
-            <NavigationItem icon={Compass} label="Explorar" />
+            <NavigationItem icon={Home} label="Inicio" isActive onPress={() => router.replace('/')} />
+            <NavigationItem icon={Compass} label="Explorar" onPress={() => router.push('/explore')} />
             <NavigationItem icon={BookOpen} label="Mis Cursos" />
-            <NavigationItem icon={Plus} label="Crear Curso" />
+            <NavigationItem icon={Plus} label="Crear Curso" onPress={() => router.push('/create')} />
             <NavigationItem icon={Award} label="Logros" />
-            <NavigationItem icon={User} label="Perfil" />
+            <NavigationItem icon={User} label="Perfil" onPress={() => router.push('/profile')} />
             <NavigationItem icon={Settings} label="Configuración" />
           </View>
         </ScrollView>
-
-        {/* Footer perfil/logout fijo */}
         <View style={styles.sidebarFooter}>
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
@@ -237,14 +231,12 @@ export default function DashboardScreen() {
             </View>
           </View>
           <TouchableOpacity style={styles.logoutButton}>
-            <LogOut size={20} color={Colors.danger} onPress={handleLogout} />
+            <LogOut size={20} color={VibrantColors.danger} onPress={handleLogout} />
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Contenido Principal */}
       <ScrollView style={styles.webMainContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.webHeaderContainer}>
+        <View style={[styles.webHeaderContainer, styles.webHeaderContainerWeb]}>
           <View style={styles.webHeader}>
             <View>
               <Text style={styles.webGreeting}>¡Buenos días, {dummyUser.name}!</Text>
@@ -257,7 +249,6 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
-
         {renderStatsSection()}
         {renderCoursesSection('Mis Cursos en Progreso', myCourses, true)}
         {renderCoursesSection('Cursos Recomendados', featuredCourses)}
@@ -265,27 +256,21 @@ export default function DashboardScreen() {
       </ScrollView>
     </View>
   );
-
-  // --- Layout Mobile (sin cambios) ---
   const renderMobile = () => (
     <SafeAreaView style={styles.mobileContainer}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* --- Encabezado Móvil Modificado --- */}
         <View style={styles.mobileHeader}>
+          {/* Avatar movido aquí y alineado a la derecha */}
           <View style={styles.mobileHeaderTop}>
-            <Image source={TwiggLogo} style={styles.mobileLogo} resizeMode="contain" />
-            <View style={styles.mobileHeaderActions}>
-              <TouchableOpacity style={styles.notificationButton}>
-                <View style={styles.notificationBadge} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.profileButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatar} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.profileButton}>
+              <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatar} />
+            </TouchableOpacity>
           </View>
           <Text style={styles.mobileGreeting}>¡Hola, {dummyUser.name}!</Text>
           <Text style={styles.mobileSubtitle}>Continúa tu aprendizaje</Text>
         </View>
-
+        {/* --- Fin Encabezado Móvil Modificado --- */}
         <View style={styles.statsSection}>
           <View style={styles.sectionHeader}></View>
           <View style={styles.statsGrid}>
@@ -319,39 +304,32 @@ export default function DashboardScreen() {
             />
           </View>
         </View>
-
         {renderCoursesSection('Mis Cursos en Progreso', myCourses, true)}
         {renderAchievementsSection()}
         {renderCoursesSection('Cursos Destacados', featuredCourses)}
       </ScrollView>
     </SafeAreaView>
   );
-
   return isWeb && isDesktop ? renderWeb() : renderMobile();
 }
-
 const styles = StyleSheet.create({
-  // --- General ---
   container: {
     flex: 1,
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: VibrantColors.backgroundSecondary,
   },
-
-  // --- Web / Desktop ---
   webContainer: {
     flex: 1,
     flexDirection: 'row',
     width: '100%',
     maxWidth: 1600,
     alignSelf: 'center',
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: VibrantColors.backgroundSecondary,
   },
   webSidebar: {
     width: 280,
-    backgroundColor: 'rgba(139,92,246,0.05)',
+    backgroundColor: VibrantColors.sidebarBackground, // Fondo más vibrante
     borderRightWidth: 1,
-    borderRightColor: Colors.borderLight,
-    // ya no justifyContent: space-between
+    borderRightColor: VibrantColors.borderLight,
   },
   webSidebarContent: {
     padding: getSpacing('lg'),
@@ -372,7 +350,7 @@ const styles = StyleSheet.create({
   sidebarTitle: {
     fontSize: getFontSize('xl'),
     fontWeight: '800',
-    color: Colors.primary,
+    color: VibrantColors.primary,
   },
   navigationMenu: {
     gap: getSpacing('xs'),
@@ -387,69 +365,44 @@ const styles = StyleSheet.create({
     gap: getSpacing('md'),
   },
   navItemActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: VibrantColors.primary,
   },
   navLabel: {
     fontSize: getFontSize('sm'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
     fontWeight: '500',
   },
   navLabelActive: {
-    color: Colors.white,
+    color: VibrantColors.surface,
     fontWeight: '600',
-  },
-  sidebarStats: {
-    gap: getSpacing('md'),
-    marginBottom: getSpacing('xl'),
-  },
-  sidebarStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: getSpacing('sm'),
-  },
-  sidebarStatText: {
-    fontSize: getFontSize('sm'),
-    color: Colors.text,
-  },
-  sidebarSection: {
-    marginBottom: getSpacing('xl'),
-  },
-  webSidebarSectionTitle: {
-    fontSize: getFontSize('md'),
-    fontWeight: '700',
-    color: Colors.primary,
-    marginBottom: getSpacing('sm'),
-  },
-  weeklyProgressSidebar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: getSpacing('md'),
-  },
-  recentAchievementsScroll: {
-    // opcional, ajustar padding si necesario
-  },
-  recentAchievementWrapper: {
-    marginRight: getSpacing('md'),
   },
   sidebarFooter: {
     borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    borderTopColor: VibrantColors.borderLight,
     padding: getSpacing('md'),
-    backgroundColor: Colors.surface,
+    backgroundColor: VibrantColors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
   webMainContent: {
     flex: 1,
     padding: getSpacing('xl'),
   },
   webHeaderContainer: {
-    backgroundColor: 'rgba(139,92,246,0.1)',
+    backgroundColor: VibrantColors.headerBackground, // Fondo más vibrante
     borderRadius: 16,
     marginBottom: getSpacing('xl'),
     padding: getSpacing('lg'),
+  },
+  // Estilos web específicos para reducir altura
+  webHeaderContainerWeb: {
+    paddingVertical: getSpacing('md'), // Reducido de 'lg' a 'md'
+    marginBottom: getSpacing('lg'), // Reducido de 'xl' a 'lg'
+  },
+  statsSectionWeb: {
+    paddingVertical: getSpacing('md'), // Reducido padding vertical
+    marginBottom: getSpacing('lg'), // Reducido margen inferior
   },
   webHeader: {
     flexDirection: 'row',
@@ -459,12 +412,12 @@ const styles = StyleSheet.create({
   webGreeting: {
     fontSize: getFontSize('xxl'),
     fontWeight: '800',
-    color: Colors.text,
+    color: VibrantColors.text,
     marginBottom: getSpacing('xs'),
   },
   webSubtitle: {
     fontSize: getFontSize('md'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
   },
   webHeaderActions: {
     flexDirection: 'row',
@@ -482,7 +435,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.danger,
+    backgroundColor: VibrantColors.danger,
   },
   profileButton: {
     width: 40,
@@ -491,41 +444,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileInitials: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-
   // --- Secciones con cards blancas y sombra ---
   webSection: {
-    backgroundColor: Colors.surface,
+    backgroundColor: VibrantColors.surface,
     borderRadius: 12,
     padding: getSpacing('lg'),
     marginBottom: getSpacing('xl'),
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: VibrantColors.shadow,
+    shadowOffset: { width: 0, height: 4 }, // Sombra más pronunciada
+    shadowOpacity: 0.15, // Opacidad más alta
+    shadowRadius: 8, // Radio más grande
+    elevation: 4, // Elevación más alta para Android
+    borderWidth: 1, // Borde sutil
+    borderColor: VibrantColors.borderLight,
   },
   webSectionTitle: {
     fontSize: getFontSize('lg'),
     fontWeight: '700',
-    color: Colors.primary,
-    borderBottomColor: Colors.primary,
+    color: VibrantColors.primary,
+    borderBottomColor: VibrantColors.primary,
     borderBottomWidth: 2,
     paddingBottom: getSpacing('xs'),
     marginBottom: getSpacing('md'),
     alignSelf: 'flex-start',
   },
-
-  // --- Mobile (sin cambios) ---
   mobileContainer: {
     flex: 1,
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: VibrantColors.backgroundSecondary,
   },
   mobileHeader: {
-    backgroundColor: Colors.primary,
+    backgroundColor: VibrantColors.primary,
     padding: getSpacing('lg'),
     paddingTop: getSpacing('md'),
     borderBottomLeftRadius: 24,
@@ -533,7 +481,7 @@ const styles = StyleSheet.create({
   },
   mobileHeaderTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'flex-end',
     marginBottom: getSpacing('xs'),
   },
@@ -549,12 +497,12 @@ const styles = StyleSheet.create({
   mobileGreeting: {
     fontSize: getFontSize('xl'),
     fontWeight: '700',
-    color: Colors.white,
+    color: VibrantColors.surface,
     marginBottom: getSpacing('xs'),
   },
   mobileSubtitle: {
     fontSize: getFontSize('md'),
-    color: Colors.white,
+    color: VibrantColors.surface,
   },
   webAvatar: {
     width: 60,
@@ -564,8 +512,6 @@ const styles = StyleSheet.create({
     marginTop: 100,
     marginRight: 40
   },
-
-  // --- Stats Section ---
   statsSection: {
     marginBottom: getSpacing('xl'),
   },
@@ -576,18 +522,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: getSpacing('sm'),
   },
   statCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: VibrantColors.surface,
     borderRadius: 16,
     padding: getSpacing('md'),
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     minWidth: 150,
-    shadowColor: Colors.shadow,
+    shadowColor: VibrantColors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
   },
   statCardWeb: {
     flex: 1,
@@ -607,20 +555,18 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: getFontSize('lg'),
     fontWeight: '700',
-    color: Colors.text,
+    color: VibrantColors.text,
     marginBottom: 2,
   },
   statTitle: {
     fontSize: getFontSize('sm'),
     fontWeight: '600',
-    color: Colors.text,
+    color: VibrantColors.text,
   },
   statDescription: {
     fontSize: getFontSize('xs'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
   },
-
-  // --- Sections ---
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -631,7 +577,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: getFontSize('lg'),
     fontWeight: '700',
-    color: Colors.text,
+    color: VibrantColors.text,
   },
   coursesList: {
     paddingHorizontal: getSpacing('sm'),
@@ -644,8 +590,6 @@ const styles = StyleSheet.create({
   courseCardWrapper: {
     marginRight: getSpacing('md'),
   },
-
-  // --- Achievements ---
   achievementsList: {
     gap: getSpacing('md'),
     paddingHorizontal: getSpacing('sm'),
@@ -653,14 +597,16 @@ const styles = StyleSheet.create({
   achievementItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: VibrantColors.surface,
     borderRadius: 16,
     padding: getSpacing('md'),
-    shadowColor: Colors.shadow,
+    shadowColor: VibrantColors.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
   },
   achievementIconContainer: {
     width: 40,
@@ -681,12 +627,12 @@ const styles = StyleSheet.create({
   achievementTitle: {
     fontSize: getFontSize('sm'),
     fontWeight: '600',
-    color: Colors.text,
+    color: VibrantColors.text,
     marginBottom: 2,
   },
   achievementDescription: {
     fontSize: getFontSize('xs'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
   },
   achievementPoints: {
     flexDirection: 'row',
@@ -695,11 +641,9 @@ const styles = StyleSheet.create({
   },
   achievementPointsText: {
     fontSize: getFontSize('xs'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
     fontWeight: '500',
   },
-
-  // --- Weekly Progress (Sidebar) ---
   weeklyProgress: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -712,14 +656,12 @@ const styles = StyleSheet.create({
   weeklyProgressValue: {
     fontSize: getFontSize('lg'),
     fontWeight: '700',
-    color: Colors.text,
+    color: VibrantColors.text,
   },
   weeklyProgressLabel: {
     fontSize: getFontSize('sm'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
   },
-
-  // --- Progress Ring ---
   progressRingContainer: {
     position: 'relative',
     alignItems: 'center',
@@ -738,16 +680,14 @@ const styles = StyleSheet.create({
   progressRingText: {
     fontSize: getFontSize('sm'),
     fontWeight: '700',
-    color: Colors.text,
+    color: VibrantColors.text,
   },
-
-  // --- User Profile Section ---
   userProfileSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: getSpacing('md'),
-    backgroundColor: Colors.background,
+    backgroundColor: VibrantColors.backgroundSecondary,
     borderRadius: 16,
   },
   userInfo: {
@@ -763,7 +703,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   userInitials: {
-    color: Colors.white,
+    color: VibrantColors.surface,
     fontWeight: '600',
     fontSize: getFontSize('sm'),
   },
@@ -773,11 +713,11 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: getFontSize('sm'),
     fontWeight: '600',
-    color: Colors.text,
+    color: VibrantColors.text,
   },
   userEmail: {
     fontSize: getFontSize('xs'),
-    color: Colors.textSecondary,
+    color: VibrantColors.textSecondary,
   },
   logoutButton: {
     padding: getSpacing('xs'),

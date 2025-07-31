@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+// login.tsx
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,16 +24,22 @@ import TwiggLogo from '@/assets/images/twigg_logo.png';
 import IcGoogle from '@/assets/images/ic_google.png';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { signInWithPopup } from 'firebase/auth';
+import Constants from 'expo-constants';
 
 // --- Firebase imports ---
-import { auth } from '@/config/firebase'; // Asegúrate de crear este archivo
+import { auth } from '@/config/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+
+// Extraer webClientId desde extras de expoConfig
+const { webClientId } = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
 
 // --- HeroPanel: Totalmente aislado y memoizado ---
 const HeroPanel = React.memo(() => (
   <View style={styles.heroContainer}>
     <Image
-      source={{ uri: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1200' }}
+      source={{
+        uri: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      }}
       style={styles.heroImage}
       resizeMode="cover"
     />
@@ -64,78 +72,45 @@ const HeroPanel = React.memo(() => (
 ));
 HeroPanel.displayName = 'HeroPanel';
 
-export default function LoginScreen() {
-  const { height: windowHeight } = useWindowDimensions();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+interface FormProps {
+  email: string;
+  password: string;
+  isSignUp: boolean;
+  showPassword: boolean;
+  setEmail: (v: string) => void;
+  setPassword: (v: string) => void;
+  setIsSignUp: (v: boolean) => void;
+  setShowPassword: (v: boolean) => void;
+  handleGoogleSignIn: () => Promise<void>;
+  handleAuth: () => void;
+}
 
-  // Configurar Google Sign-In al montar el componente
-  useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: '1091750318583-4k6s5g8ffgctkapj5enskvam454m3ch7.apps.googleusercontent.com', // 👈 Reemplaza con tu Web Client ID
-      offlineAccess: true,
-    });
-  }, []);
-
-  const handleAuth = () => {
-    router.replace('/(tabs)');
-  };
-
+const Form: React.FC<FormProps> = ({
+  email,
+  password,
+  isSignUp,
+  showPassword,
+  setEmail,
+  setPassword,
+  setIsSignUp,
+  setShowPassword,
+  handleGoogleSignIn,
+  handleAuth,
+}) => {
   const isValidEmail = email.includes('@') && email.includes('.');
   const isFormValid = email.length > 0 && password.length >= 6;
 
-  // --- Google Sign-In Handler ---
-  const handleGoogleSignIn = async () => {
-  try {
-    if (!isWeb) {
-      // --- ANDROID / iOS: Usar react-native-google-signin ---
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken;
-
-      if (!idToken) {
-        throw new Error('No se obtuvo el ID token de Google');
-      }
-
-      const credential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(auth, credential);
-    } else {
-      // --- WEB: Usar Firebase directamente con popup ---
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    }
-
-    // ✅ Login exitoso
-    router.replace('/(tabs)');
-  } catch (error: any) {
-    console.error('Error en login con Google:', error);
-
-    if (error.code === 'auth/popup-closed-by-user') {
-      console.log('Popup cerrado por el usuario');
-    } else if (error.code === 'auth/web-storage-unsupported') {
-      alert('Habilita las cookies. No funciona en modo incógnito.');
-    } else {
-      alert('Error al iniciar sesión con Google. Intenta de nuevo.');
-    }
-  }
-};
-
-  // JSX del formulario
-  const Form = () => (
+  return (
     <View style={styles.form}>
       {isSignUp && (
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Nombre completo</Text>
           <TextInput
-            style={[
-              styles.input,
-              isWeb && isDesktop && styles.webInput,
-            ]}
+            style={[styles.input, isWeb && isDesktop && styles.webInput]}
             placeholder="Tu nombre"
             placeholderTextColor="#94a3b8"
             onChangeText={() => {}}
+            autoCapitalize="words"
           />
         </View>
       )}
@@ -153,6 +128,7 @@ export default function LoginScreen() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          autoCorrect={false}
         />
       </View>
       <View style={styles.inputGroup}>
@@ -165,21 +141,17 @@ export default function LoginScreen() {
           ]}
         >
           <TextInput
-            style={[
-              styles.inputPassword,
-              isWeb && isDesktop && styles.webInput,
-            ]}
+            style={[styles.inputPassword, isWeb && isDesktop && styles.webInput]}
             placeholder="Mínimo 6 caracteres"
             placeholderTextColor="#94a3b8"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <TouchableOpacity
-            style={[
-              styles.eyeButton,
-              isWeb && isDesktop && styles.webEyeButton,
-            ]}
+            style={[styles.eyeButton, isWeb && isDesktop && styles.webEyeButton]}
             onPress={() => setShowPassword(!showPassword)}
             focusable={false}
             accessible={false}
@@ -202,9 +174,7 @@ export default function LoginScreen() {
       </View>
       {!isSignUp && (
         <TouchableOpacity style={styles.forgotPasswordButton}>
-          <Text style={styles.forgotPasswordText}>
-            ¿Olvidaste tu contraseña?
-          </Text>
+          <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -226,22 +196,14 @@ export default function LoginScreen() {
         <View style={styles.dividerLine} />
       </View>
       <TouchableOpacity
-        style={[
-          styles.googleButton,
-          isWeb && isDesktop && styles.webGoogleButton,
-        ]}
-        onPress={handleGoogleSignIn} // 🔥 Botón conectado
+        style={[styles.googleButton, isWeb && isDesktop && styles.webGoogleButton]}
+        onPress={handleGoogleSignIn}
       >
         <Image source={IcGoogle} style={styles.googleIcon} />
-        <Text style={styles.googleButtonText}>
-          Continuar con Google
-        </Text>
+        <Text style={styles.googleButtonText}>Continuar con Google</Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[
-          styles.toggleContainer,
-          isWeb && isDesktop && styles.webToggleContainer,
-        ]}
+        style={[styles.toggleContainer, isWeb && isDesktop && styles.webToggleContainer]}
         onPress={() => {
           setIsSignUp(!isSignUp);
           setEmail('');
@@ -257,6 +219,58 @@ export default function LoginScreen() {
       </TouchableOpacity>
     </View>
   );
+};
+
+export default function LoginScreen() {
+  const { height: windowHeight } = useWindowDimensions();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Configurar Google Sign-In al montar el componente
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: webClientId,
+      offlineAccess: true,
+    });
+  }, []);
+
+  const handleAuth = useCallback(() => {
+    router.replace('/(tabs)');
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      if (!isWeb) {
+        await GoogleSignin.hasPlayServices();
+        const userInfo = await GoogleSignin.signIn();
+        const idToken = userInfo.data?.idToken;
+
+        if (!idToken) {
+          throw new Error('No se obtuvo el ID token de Google');
+        }
+
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+      } else {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      }
+
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      console.error('Error en login con Google:', error);
+
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log('Popup cerrado por el usuario');
+      } else if (error.code === 'auth/web-storage-unsupported') {
+        alert('Habilita las cookies. No funciona en modo incógnito.');
+      } else {
+        alert('Error al iniciar sesión con Google. Intenta de nuevo.');
+      }
+    }
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -271,42 +285,49 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={[styles.header, styles.webHeader]}>
-              <Image
-                source={TwiggLogo}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+              <Image source={TwiggLogo} style={styles.logoImage} resizeMode="contain" />
               <Text style={styles.title}>Twigg</Text>
               <Text style={styles.subtitle}>
-                {isSignUp
-                  ? 'Crea tu cuenta gratuita'
-                  : 'Bienvenido de nuevo'}
+                {isSignUp ? 'Crea tu cuenta gratuita' : 'Bienvenido de nuevo'}
               </Text>
             </View>
-            <Form />
+            <Form
+              email={email}
+              password={password}
+              isSignUp={isSignUp}
+              showPassword={showPassword}
+              setEmail={setEmail}
+              setPassword={setPassword}
+              setIsSignUp={setIsSignUp}
+              setShowPassword={setShowPassword}
+              handleGoogleSignIn={handleGoogleSignIn}
+              handleAuth={handleAuth}
+            />
           </ScrollView>
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
             <View style={styles.formPanel}>
               <View style={styles.header}>
-                <Image
-                  source={TwiggLogo}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
+                <Image source={TwiggLogo} style={styles.logoImage} resizeMode="contain" />
                 <Text style={styles.title}>Twigg</Text>
                 <Text style={styles.subtitle}>
-                  {isSignUp
-                    ? 'Crea tu cuenta gratuita'
-                    : 'Bienvenido de nuevo'}
+                  {isSignUp ? 'Crea tu cuenta gratuita' : 'Bienvenido de nuevo'}
                 </Text>
               </View>
-              <Form />
+              <Form
+                email={email}
+                password={password}
+                isSignUp={isSignUp}
+                showPassword={showPassword}
+                setEmail={setEmail}
+                setPassword={setPassword}
+                setIsSignUp={setIsSignUp}
+                setShowPassword={setShowPassword}
+                handleGoogleSignIn={handleGoogleSignIn}
+                handleAuth={handleAuth}
+              />
             </View>
           </View>
         </ScrollView>
