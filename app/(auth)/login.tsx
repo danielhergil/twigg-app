@@ -28,7 +28,15 @@ import Constants from 'expo-constants';
 
 // --- Firebase imports ---
 import { auth } from '@/config/firebase';
-import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  signInWithCredential,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  // sendEmailVerification, // si quieres verificar email
+} from 'firebase/auth';
+
+import { ensureGoogleSigninConfigured } from '@/utils/googleSignIn';
 
 // Extraer webClientId desde extras de expoConfig
 const { webClientId } = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
@@ -83,6 +91,8 @@ interface FormProps {
   setShowPassword: (v: boolean) => void;
   handleGoogleSignIn: () => Promise<void>;
   handleAuth: () => void;
+  loading: boolean;
+  googleLoading: boolean;
 }
 
 const Form: React.FC<FormProps> = ({
@@ -96,9 +106,11 @@ const Form: React.FC<FormProps> = ({
   setShowPassword,
   handleGoogleSignIn,
   handleAuth,
+  loading,
+  googleLoading,
 }) => {
   const isValidEmail = email.includes('@') && email.includes('.');
-  const isFormValid = email.length > 0 && password.length >= 6;
+  const isFormValid = email.trim().length > 0 && password.length >= 6 && isValidEmail;
 
   return (
     <View style={styles.form}>
@@ -119,7 +131,7 @@ const Form: React.FC<FormProps> = ({
         <TextInput
           style={[
             styles.input,
-            !isValidEmail && email.length > 0 && styles.inputError,
+            (!isValidEmail || email.trim().length === 0) && email.length > 0 && styles.inputError,
             isWeb && isDesktop && styles.webInput,
           ]}
           placeholder="tu@email.com"
@@ -130,6 +142,9 @@ const Form: React.FC<FormProps> = ({
           autoCapitalize="none"
           autoCorrect={false}
         />
+        {email.length > 0 && !isValidEmail && (
+          <Text style={styles.errorText}>Email no válido</Text>
+        )}
       </View>
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Contraseña</Text>
@@ -180,14 +195,14 @@ const Form: React.FC<FormProps> = ({
       <TouchableOpacity
         style={[
           styles.primaryButton,
-          !isFormValid && styles.primaryButtonDisabled,
+          (!isFormValid || loading) && styles.primaryButtonDisabled,
           isWeb && isDesktop && styles.webPrimaryButton,
         ]}
         onPress={handleAuth}
-        disabled={!isFormValid}
+        disabled={!isFormValid || loading}
       >
         <Text style={styles.primaryButtonText}>
-          {isSignUp ? 'Crear cuenta' : 'Iniciar sesión'}
+          {loading ? (isSignUp ? 'Creando...' : 'Entrando...') : isSignUp ? 'Crear cuenta' : 'Iniciar sesión'}
         </Text>
       </TouchableOpacity>
       <View style={styles.dividerContainer}>
@@ -198,9 +213,12 @@ const Form: React.FC<FormProps> = ({
       <TouchableOpacity
         style={[styles.googleButton, isWeb && isDesktop && styles.webGoogleButton]}
         onPress={handleGoogleSignIn}
+        disabled={googleLoading}
       >
         <Image source={IcGoogle} style={styles.googleIcon} />
-        <Text style={styles.googleButtonText}>Continuar con Google</Text>
+        <Text style={styles.googleButtonText}>
+          {googleLoading ? 'Procesando...' : 'Continuar con Google'}
+        </Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.toggleContainer, isWeb && isDesktop && styles.webToggleContainer]}
@@ -227,21 +245,75 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Configurar Google Sign-In al montar el componente
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: webClientId,
-      offlineAccess: true,
-    });
+    ensureGoogleSigninConfigured();
   }, []);
 
-  const handleAuth = useCallback(() => {
-    router.replace('/(tabs)');
-  }, []);
+  const handleAuth = useCallback(async () => {
+    const emailTrimmed = email.trim();
+    const isValidEmail = emailTrimmed.includes('@') && emailTrimmed.includes('.');
+    if (!isValidEmail || password.length < 6) return;
+
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        // Registro
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          emailTrimmed,
+          password
+        );
+        // Si quieres verificación de email:
+        // await sendEmailVerification(userCredential.user);
+      } else {
+        // Login
+        await signInWithEmailAndPassword(auth, emailTrimmed, password);
+      }
+
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      console.error('Error auth email/pass:', e);
+      let mensaje = 'Ocurrió un error. Intenta de nuevo.';
+
+      if (e.code) {
+        switch (e.code) {
+          case 'auth/email-already-in-use':
+            mensaje = 'El correo ya está en uso.';
+            break;
+          case 'auth/invalid-email':
+            mensaje = 'El correo no es válido.';
+            break;
+          case 'auth/weak-password':
+            mensaje = 'La contraseña es demasiado débil.';
+            break;
+          case 'auth/user-not-found':
+            mensaje = 'Usuario no encontrado.';
+            break;
+          case 'auth/wrong-password':
+            mensaje = 'Contraseña incorrecta.';
+            break;
+          case 'auth/user-disabled':
+            mensaje = 'La cuenta está deshabilitada.';
+            break;
+        }
+      } else if (e.message) {
+        mensaje = e.message;
+      }
+
+      alert(mensaje);
+    } finally {
+      setLoading(false);
+    }
+  }, [email, password, isSignUp, router]);
 
   const handleGoogleSignIn = useCallback(async () => {
+    setGoogleLoading(true);
     try {
+      ensureGoogleSigninConfigured();
+
       if (!isWeb) {
         await GoogleSignin.hasPlayServices();
         const userInfo = await GoogleSignin.signIn();
@@ -269,13 +341,15 @@ export default function LoginScreen() {
       } else {
         alert('Error al iniciar sesión con Google. Intenta de nuevo.');
       }
+    } finally {
+      setGoogleLoading(false);
     }
-  }, []);
+  }, [router]);
 
   return (
     <SafeAreaView style={styles.container}>
       {isWeb && isDesktop ? (
-        <View style={styles.containerWeb}>
+        <View style={[styles.containerWeb]}>
           <View style={[styles.leftPanel, { height: windowHeight }]}>
             <HeroPanel />
           </View>
@@ -302,6 +376,8 @@ export default function LoginScreen() {
               setShowPassword={setShowPassword}
               handleGoogleSignIn={handleGoogleSignIn}
               handleAuth={handleAuth}
+              loading={loading}
+              googleLoading={googleLoading}
             />
           </ScrollView>
         </View>
@@ -327,6 +403,8 @@ export default function LoginScreen() {
                 setShowPassword={setShowPassword}
                 handleGoogleSignIn={handleGoogleSignIn}
                 handleAuth={handleAuth}
+                loading={loading}
+                googleLoading={googleLoading}
               />
             </View>
           </View>

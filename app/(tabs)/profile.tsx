@@ -31,6 +31,7 @@ import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { ensureGoogleSigninConfigured } from '@/utils/googleSignIn';
 
 const { width } = Dimensions.get('window');
 
@@ -55,6 +56,7 @@ const handleLogout = async () => {
   try {
     await signOut(auth);
     if (!isWeb) {
+      ensureGoogleSigninConfigured();
       await GoogleSignin.signOut();
     }
     router.replace('/login');
