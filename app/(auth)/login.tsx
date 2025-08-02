@@ -288,7 +288,12 @@ export default function LoginScreen() {
         await setDoc(doc(db, 'users', user.uid), {
           name: fullName.trim(),
           email: user.email,
-          createdAt: serverTimestamp(),
+          avatar: '', // no hay foto en registro por email/password
+          totalPoints: 0,
+          coursesCompleted: 0,
+          coursesInProgress: 0,
+          coursesCreated: 0,
+          createdAt: new Date(),
         });
       } else {
         // Login
@@ -360,9 +365,14 @@ export default function LoginScreen() {
           {
             name: user.displayName ?? '',
             email: user.email,
-            createdAt: serverTimestamp(),
+            avatar: user.photoURL || '',
+            totalPoints: 0,
+            coursesCompleted: 0,
+            coursesInProgress: 0,
+            coursesCreated: 0,
+            createdAt: new Date(), // si ya existe, este campo no se sobreescribe porque usamos merge
           },
-          { merge: true }
+          { merge: true } // conserva lo que ya haya (progreso, logros, etc.)
         );
       }
 
