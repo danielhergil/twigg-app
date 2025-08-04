@@ -1,5 +1,5 @@
 // app/(tabs)/explore.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Search,
@@ -24,7 +25,6 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
-import { dummyCourses, dummyUser } from '@/data/dummyData';
 import CourseCard from '@/components/CourseCard';
 import { Colors } from '@/constants/Colors';
 import TwiggLogo from '@/assets/images/twigg_logo.png';
@@ -32,24 +32,26 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { router } from 'expo-router';
+import { useUserProfile } from '@/utils/useUserProfile';
+import { useCourses } from '@/hooks/useCourses';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 // --- Colores Vibrantes Personalizados (iguales a dashboard) ---
 const VibrantColors = {
-  primary: '#7e22ce', // Morado más intenso
-  secondary: '#f59e0b', // Ámbar
-  accent: '#ec4899', // Rosa
-  success: '#10b981', // Verde esmeralda
-  danger: '#ef4444', // Rojo
-  backgroundSecondary: '#f8fafc', // Fondo muy claro
-  surface: '#ffffff', // Blanco puro para tarjetas
-  text: '#1e293b', // Gris oscuro
-  textSecondary: '#64748b', // Gris medio
-  borderLight: '#cbd5e1', // Gris claro para bordes
-  shadow: '#000000', // Sombra más oscura
-  sidebarBackground: 'rgba(126, 34, 206, 0.1)', // Fondo del sidebar más intenso
-  headerBackground: 'rgba(126, 34, 206, 0.2)', // Fondo del header más intenso
+  primary: '#7e22ce',
+  secondary: '#f59e0b',
+  accent: '#ec4899',
+  success: '#10b981',
+  danger: '#ef4444',
+  backgroundSecondary: '#f8fafc',
+  surface: '#ffffff',
+  text: '#1e293b',
+  textSecondary: '#64748b',
+  borderLight: '#cbd5e1',
+  shadow: '#000000',
+  sidebarBackground: 'rgba(126, 34, 206, 0.1)',
+  headerBackground: 'rgba(126, 34, 206, 0.2)',
 };
 
 const filters = ['Todos', 'Básico', 'Intermedio', 'Avanzado'];
@@ -71,14 +73,22 @@ const handleLogout = async () => {
 export default function ExploreScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('Todos');
-  
-  const filteredCourses = dummyCourses.filter((course) => {
-    const matchesSearch =
-      course.courseTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = selectedFilter === 'Todos' || course.level === selectedFilter;
-    return matchesSearch && matchesFilter;
-  });
+
+  const { profile, loading: userLoading } = useUserProfile();
+  const { courses, loading: coursesLoading } = useCourses();
+
+  // Filtrado en memoria
+  const filteredCourses = useMemo(() => {
+    if (coursesLoading) return [];
+    return courses.filter((course) => {
+      const matchesSearch =
+        course.courseTitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.author?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter =
+        selectedFilter === 'Todos' || course.level === selectedFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [courses, searchQuery, selectedFilter, coursesLoading]);
 
   const CategoryCard = ({ category }: { category: string }) => (
     <TouchableOpacity style={styles.categoryCard}>
@@ -114,7 +124,7 @@ export default function ExploreScreen() {
 
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
-      {/* Sidebar - Copiada exactamente de index.tsx */}
+      {/* Sidebar */}
       <View style={styles.webSidebar}>
         <ScrollView
           contentContainerStyle={styles.webSidebarContent}
@@ -140,21 +150,26 @@ export default function ExploreScreen() {
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
               <TouchableOpacity style={styles.profileButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarEmail} />
+                <Image
+                  source={{ uri: profile?.avatar || undefined }}
+                  style={styles.webAvatarEmail}
+                />
               </TouchableOpacity>
             </View>
             <View style={styles.userText}>
-              <Text style={styles.userName}>{dummyUser.name}</Text>
-              <Text style={styles.userEmail}>{dummyUser.email}</Text>
+              <Text style={styles.userName}>
+                {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
+              </Text>
+              <Text style={styles.userEmail}>{profile?.email ?? ''}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.logoutButton}>
-            <LogOut size={20} color={VibrantColors.danger} onPress={handleLogout} />
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={20} color={VibrantColors.danger} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Content - Rediseñado con mejor UX/UI */}
+      {/* Main Content */}
       <ScrollView style={styles.webMainContent} showsVerticalScrollIndicator={false}>
         <View style={styles.webHeaderContainer}>
           <View style={styles.webHeader}>
@@ -164,13 +179,16 @@ export default function ExploreScreen() {
             </View>
             <View style={styles.webHeaderActions}>
               <TouchableOpacity style={styles.notificationButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarWeb} />
+                <Image
+                  source={{ uri: profile?.avatar || undefined }}
+                  style={styles.webAvatarWeb}
+                />
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Barra de búsqueda y filtros mejorada */}
+        {/* Barra de búsqueda y filtros */}
         <View style={styles.webSearchAndFiltersSection}>
           <View style={styles.searchContainer}>
             <Search size={20} color={VibrantColors.textSecondary} />
@@ -184,8 +202,8 @@ export default function ExploreScreen() {
           </View>
 
           <View style={styles.filtersContainer}>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filtersScrollContent}
             >
@@ -196,7 +214,7 @@ export default function ExploreScreen() {
           </View>
         </View>
 
-        {/* Categorías */}
+        {/* Categorías Populares */}
         <View style={styles.webSection}>
           <Text style={styles.webSectionTitle}>Categorías Populares</Text>
           <View style={styles.categoriesGrid}>
@@ -210,12 +228,20 @@ export default function ExploreScreen() {
         <View style={styles.webSection}>
           <View style={styles.resultsHeader}>
             <Text style={styles.resultsTitle}>Resultados de búsqueda</Text>
-            <Text style={styles.resultsCount}>({filteredCourses.length} cursos encontrados)</Text>
+            <Text style={styles.resultsCount}>
+              ({coursesLoading ? '...' : `${filteredCourses.length} cursos encontrados`})
+            </Text>
           </View>
-          
-          {filteredCourses.length === 0 ? (
+
+          {coursesLoading ? (
             <View style={styles.noResultsContainer}>
-              <Text style={styles.noResultsText}>No se encontraron cursos que coincidan con tu búsqueda</Text>
+              <ActivityIndicator />
+            </View>
+          ) : filteredCourses.length === 0 ? (
+            <View style={styles.noResultsContainer}>
+              <Text style={styles.noResultsText}>
+                No se encontraron cursos que coincidan con tu búsqueda
+              </Text>
             </View>
           ) : (
             <View style={styles.cardsGrid}>
@@ -249,6 +275,7 @@ export default function ExploreScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Categorías</Text>
         <ScrollView
@@ -261,6 +288,7 @@ export default function ExploreScreen() {
           ))}
         </ScrollView>
       </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Filtrar por nivel</Text>
         <ScrollView
@@ -273,21 +301,30 @@ export default function ExploreScreen() {
           ))}
         </ScrollView>
       </View>
+
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Resultados ({filteredCourses.length})</Text>
+        <Text style={styles.sectionTitle}>Resultados ({coursesLoading ? '...' : filteredCourses.length})</Text>
         <View style={styles.mobileCoursesList}>
-          {filteredCourses.map((course) => (
-            <View
-              key={course.id}
-              style={{
-                width: '100%',
-                alignItems: 'center',
-                marginBottom: getSpacing('md'),
-              }}
-            >
-              <CourseCard course={course} onPress={() => {}} />
-            </View>
-          ))}
+          {coursesLoading ? (
+            <ActivityIndicator />
+          ) : filteredCourses.length === 0 ? (
+            <Text style={{ color: VibrantColors.textSecondary }}>
+              No se encontraron cursos que coincidan con tu búsqueda
+            </Text>
+          ) : (
+            filteredCourses.map((course) => (
+              <View
+                key={course.id}
+                style={{
+                  width: '100%',
+                  alignItems: 'center',
+                  marginBottom: getSpacing('md'),
+                }}
+              >
+                <CourseCard course={course} onPress={() => {}} />
+              </View>
+            ))
+          )}
         </View>
       </View>
     </ScrollView>

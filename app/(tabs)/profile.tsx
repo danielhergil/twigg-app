@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Settings,
@@ -25,31 +26,32 @@ import {
   User,
 } from 'lucide-react-native';
 import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
-import { dummyUser, dummyCourses } from '@/data/dummyData';
 import TwiggLogo from '@/assets/images/twigg_logo.png';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ensureGoogleSigninConfigured } from '@/utils/googleSignIn';
+import { useUserProfile } from '@/utils/useUserProfile';
+import { useCourses } from '@/hooks/useCourses';
 
 const { width } = Dimensions.get('window');
 
-// --- Colores Vibrantes Personalizados (iguales a create.tsx) ---
+// --- Colores Vibrantes Personalizados ---
 const VibrantColors = {
-  primary: '#7e22ce', // Morado más intenso
-  secondary: '#f59e0b', // Ámbar
-  accent: '#ec4899', // Rosa
-  success: '#10b981', // Verde esmeralda
-  danger: '#ef4444', // Rojo
-  backgroundSecondary: '#f8fafc', // Fondo muy claro
-  surface: '#ffffff', // Blanco puro para tarjetas
-  text: '#1e293b', // Gris oscuro
-  textSecondary: '#64748b', // Gris medio
-  borderLight: '#cbd5e1', // Gris claro para bordes
-  shadow: '#000000', // Sombra más oscura
-  sidebarBackground: 'rgba(126, 34, 206, 0.1)', // Fondo del sidebar más intenso
-  headerBackground: 'rgba(126, 34, 206, 0.2)', // Fondo del header más intenso
+  primary: '#7e22ce',
+  secondary: '#f59e0b',
+  accent: '#ec4899',
+  success: '#10b981',
+  danger: '#ef4444',
+  backgroundSecondary: '#f8fafc',
+  surface: '#ffffff',
+  text: '#1e293b',
+  textSecondary: '#64748b',
+  borderLight: '#cbd5e1',
+  shadow: '#000000',
+  sidebarBackground: 'rgba(126, 34, 206, 0.1)',
+  headerBackground: 'rgba(126, 34, 206, 0.2)',
 };
 
 const handleLogout = async () => {
@@ -67,9 +69,20 @@ const handleLogout = async () => {
 };
 
 export default function ProfileScreen() {
-  const createdCourses = dummyCourses.slice(0, 2); // Simulamos cursos creados por el usuario
+  const { profile, achievements, loading: userLoading } = useUserProfile();
+  const { courses, loading: coursesLoading } = useCourses();
+  const user = auth.currentUser;
+  const uid = user?.uid;
 
-  // --- StatItem Component - Styled like create.tsx ---
+  // Cursos creados por el usuario
+  const createdCourses = React.useMemo(() => {
+    if (!uid || coursesLoading) return [];
+    return courses
+      .filter((c: any) => c.createdBy === uid)
+      .slice(0, 5); // se puede ajustar cuántos mostrar
+  }, [courses, uid, coursesLoading]);
+
+  // --- StatItem Component ---
   const StatItem = ({ icon: Icon, label, value, color }: any) => (
     <View style={styles.statItem}>
       <Icon size={24} color={color} />
@@ -78,7 +91,7 @@ export default function ProfileScreen() {
     </View>
   );
 
-  // --- MenuItem Component - Styled like create.tsx ---
+  // --- MenuItem Component ---
   const MenuItem = ({ icon: Icon, title, subtitle, onPress }: any) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuItemLeft}>
@@ -94,7 +107,7 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  // --- CourseItem Component - Styled like create.tsx ---
+  // --- CourseItem Component ---
   const CourseItem = ({ course }: any) => (
     <TouchableOpacity style={styles.courseItem}>
       <Image source={{ uri: course.thumbnail }} style={styles.courseThumbnail} resizeMode="cover" />
@@ -108,14 +121,13 @@ export default function ProfileScreen() {
             <Text style={styles.courseStatText}>{course.rating}</Text>
           </View>
           <Text style={styles.courseStatText}>
-            {course.enrolledCount} estudiantes
+            {course.enrolledCount ?? 0} estudiantes
           </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  // --- NavigationItem Component - Copied from create.tsx ---
   const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) => (
     <TouchableOpacity
       style={[styles.navItem, isActive && styles.navItemActive]}
@@ -126,10 +138,9 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  // --- Web Layout - Incorporating Sidebar from create.tsx ---
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
-      {/* Sidebar - Copied exactly from create.tsx */}
+      {/* Sidebar */}
       <View style={styles.webSidebar}>
         <ScrollView
           contentContainerStyle={styles.webSidebarContent}
@@ -146,17 +157,19 @@ export default function ProfileScreen() {
             <NavigationItem icon={Compass} label="Explorar" onPress={() => router.push('/explore')} />
             <NavigationItem icon={BookOpen} label="Mis Cursos" />
             <NavigationItem icon={Plus} label="Crear Curso" onPress={() => router.push('/create')} />
-            <NavigationItem icon={Award} label="Logros"/>
+            <NavigationItem icon={Award} label="Logros" />
             <NavigationItem icon={User} label="Perfil" isActive />
-            <NavigationItem icon={Settings} label="Configuración"/>
+            <NavigationItem icon={Settings} label="Configuración" />
           </View>
         </ScrollView>
         <View style={styles.sidebarFooter}>
           <View style={styles.sidebarUser}>
-            <Image source={{ uri: dummyUser.avatar }} style={styles.sidebarAvatar} />
+            <Image source={{ uri: profile?.avatar || undefined }} style={styles.sidebarAvatar} />
             <View style={styles.sidebarText}>
-              <Text style={styles.sidebarName}>{dummyUser.name}</Text>
-              <Text style={styles.sidebarEmail}>{dummyUser.email}</Text>
+              <Text style={styles.sidebarName}>
+                {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
+              </Text>
+              <Text style={styles.sidebarEmail}>{profile?.email ?? ''}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
@@ -165,9 +178,8 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Main Content - Redesigned for better web UX/UI, matching create.tsx style */}
+      {/* Main Content */}
       <ScrollView style={styles.webMainContent} showsVerticalScrollIndicator={false}>
-        {/* Header - Styled like create.tsx */}
         <View style={[styles.webHeaderContainer, styles.webHeaderContainerCompact]}>
           <View style={styles.webHeader}>
             <View>
@@ -176,7 +188,10 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.webHeaderActions}>
               <TouchableOpacity style={styles.notificationButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarWeb} />
+                <Image
+                  source={{ uri: profile?.avatar || undefined }}
+                  style={styles.webAvatarWeb}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -185,10 +200,12 @@ export default function ProfileScreen() {
         {/* Profile Card */}
         <View style={[styles.webContentCard, styles.webContentCardCompact]}>
           <View style={styles.webProfileHeader}>
-            <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarLarge} />
+            <Image source={{ uri: profile?.avatar || undefined }} style={styles.webAvatarLarge} />
             <View style={styles.webUserInfo}>
-              <Text style={styles.webUserName}>{dummyUser.name}</Text>
-              <Text style={styles.webUserEmail}>{dummyUser.email}</Text>
+              <Text style={styles.webUserName}>
+                {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
+              </Text>
+              <Text style={styles.webUserEmail}>{profile?.email ?? ''}</Text>
               <TouchableOpacity style={styles.webEditButton}>
                 <Edit size={16} color={VibrantColors.primary} />
                 <Text style={styles.webEditButtonText}>Editar Perfil</Text>
@@ -196,24 +213,24 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Stats - Styled like create.tsx */}
+          {/* Stats */}
           <View style={styles.webStatsContainer}>
             <StatItem
               icon={BookOpen}
               label="Completados"
-              value={dummyUser.coursesCompleted}
+              value={userLoading ? <ActivityIndicator /> : profile?.coursesCompleted ?? 0}
               color={VibrantColors.success}
             />
             <StatItem
               icon={Trophy}
               label="Puntos"
-              value={dummyUser.totalPoints}
+              value={userLoading ? <ActivityIndicator /> : profile?.totalPoints ?? 0}
               color={VibrantColors.secondary}
             />
             <StatItem
               icon={Star}
               label="Creados"
-              value={dummyUser.coursesCreated}
+              value={userLoading ? <ActivityIndicator /> : profile?.coursesCreated ?? 0}
               color={VibrantColors.accent}
             />
           </View>
@@ -222,29 +239,45 @@ export default function ProfileScreen() {
         {/* Created Courses Section */}
         <View style={styles.webSection}>
           <Text style={styles.webSectionTitle}>Mis Cursos Creados</Text>
-          <View style={styles.webCoursesList}>
-            {createdCourses.map((course) => (
-              <CourseItem key={course.id} course={course} />
-            ))}
-          </View>
+          {coursesLoading ? (
+            <ActivityIndicator />
+          ) : createdCourses.length === 0 ? (
+            <Text style={{ color: VibrantColors.textSecondary }}>
+              No has creado cursos todavía.
+            </Text>
+          ) : (
+            <View style={styles.webCoursesList}>
+              {createdCourses.map((course: any) => (
+                <CourseItem key={course.id} course={course} />
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Achievements Section */}
         <View style={styles.webSection}>
           <Text style={styles.webSectionTitle}>Logros</Text>
-          <View style={styles.webAchievementsList}>
-            {dummyUser.achievements.map((achievement) => (
-              <View key={achievement.id} style={styles.webAchievementItem}>
-                <Text style={styles.webAchievementIcon}>{achievement.icon}</Text>
-                <View style={styles.webAchievementInfo}>
-                  <Text style={styles.webAchievementTitle}>{achievement.title}</Text>
-                  <Text style={styles.webAchievementDescription}>
-                    {achievement.description}
-                  </Text>
+          {userLoading ? (
+            <ActivityIndicator />
+          ) : achievements.length === 0 ? (
+            <Text style={{ color: VibrantColors.textSecondary }}>
+              Aún no tienes logros.
+            </Text>
+          ) : (
+            <View style={styles.webAchievementsList}>
+              {achievements.map((achievement) => (
+                <View key={achievement.id} style={styles.webAchievementItem}>
+                  <Text style={styles.webAchievementIcon}>{achievement.icon}</Text>
+                  <View style={styles.webAchievementInfo}>
+                    <Text style={styles.webAchievementTitle}>{achievement.title}</Text>
+                    <Text style={styles.webAchievementDescription}>
+                      {achievement.description}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Menu Section */}
@@ -258,31 +291,29 @@ export default function ProfileScreen() {
               onPress={() => router.push('/settings')}
             />
             <MenuItem
-              icon={BookOpen} // You might want a specific certificate icon
+              icon={BookOpen}
               title="Mis Certificados"
               subtitle="Ver certificados obtenidos"
-              onPress={() => {}} // Add navigation if needed
+              onPress={() => {}}
             />
-            <MenuItem
-              icon={LogOut}
-              title="Cerrar Sesión"
-              onPress={handleLogout}
-            />
+            <MenuItem icon={LogOut} title="Cerrar Sesión" onPress={handleLogout} />
           </View>
         </View>
       </ScrollView>
     </View>
   );
 
-  // --- Mobile Layout - Kept mostly as is, but updated styles ---
+  // --- Mobile Layout ---
   const renderMobileLayout = () => (
     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View style={styles.profileInfo}>
-          <Image source={{ uri: dummyUser.avatar }} style={styles.avatar} />
+          <Image source={{ uri: profile?.avatar || undefined }} style={styles.avatar} />
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{dummyUser.name}</Text>
-            <Text style={styles.userEmail}>{dummyUser.email}</Text>
+            <Text style={styles.userName}>
+              {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
+            </Text>
+            <Text style={styles.userEmail}>{profile?.email ?? ''}</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.editButton}>
@@ -293,45 +324,61 @@ export default function ProfileScreen() {
         <StatItem
           icon={BookOpen}
           label="Completados"
-          value={dummyUser.coursesCompleted}
+          value={userLoading ? <ActivityIndicator /> : profile?.coursesCompleted ?? 0}
           color={VibrantColors.success}
         />
         <StatItem
           icon={Trophy}
           label="Puntos"
-          value={dummyUser.totalPoints}
+          value={userLoading ? <ActivityIndicator /> : profile?.totalPoints ?? 0}
           color={VibrantColors.secondary}
         />
         <StatItem
           icon={Star}
           label="Creados"
-          value={dummyUser.coursesCreated}
+          value={userLoading ? <ActivityIndicator /> : profile?.coursesCreated ?? 0}
           color={VibrantColors.accent}
         />
       </View>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Mis Cursos Creados</Text>
-        <View style={styles.coursesList}>
-          {createdCourses.map((course) => (
-            <CourseItem key={course.id} course={course} />
-          ))}
-        </View>
+        {coursesLoading ? (
+          <ActivityIndicator />
+        ) : createdCourses.length === 0 ? (
+          <Text style={{ color: VibrantColors.textSecondary }}>
+            No has creado cursos todavía.
+          </Text>
+        ) : (
+          <View style={styles.coursesList}>
+            {createdCourses.map((course: any) => (
+              <CourseItem key={course.id} course={course} />
+            ))}
+          </View>
+        )}
       </View>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Logros</Text>
-        <View style={styles.achievementsList}>
-          {dummyUser.achievements.map((achievement) => (
-            <View key={achievement.id} style={styles.achievementItem}>
-              <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-              <View style={styles.achievementInfo}>
-                <Text style={styles.achievementTitle}>{achievement.title}</Text>
-                <Text style={styles.achievementDescription}>
-                  {achievement.description}
-                </Text>
+        {userLoading ? (
+          <ActivityIndicator />
+        ) : achievements.length === 0 ? (
+          <Text style={{ color: VibrantColors.textSecondary }}>
+            Aún no tienes logros.
+          </Text>
+        ) : (
+          <View style={styles.achievementsList}>
+            {achievements.map((achievement) => (
+              <View key={achievement.id} style={styles.achievementItem}>
+                <Text style={styles.achievementIcon}>{achievement.icon}</Text>
+                <View style={styles.achievementInfo}>
+                  <Text style={styles.achievementTitle}>{achievement.title}</Text>
+                  <Text style={styles.achievementDescription}>
+                    {achievement.description}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Configuración</Text>
@@ -343,16 +390,12 @@ export default function ProfileScreen() {
             onPress={() => router.push('/settings')}
           />
           <MenuItem
-            icon={BookOpen} // Certificate icon
+            icon={BookOpen}
             title="Mis Certificados"
             subtitle="Ver certificados obtenidos"
-            onPress={() => {}} // Add navigation if needed
+            onPress={() => {}}
           />
-          <MenuItem
-            icon={LogOut}
-            title="Cerrar Sesión"
-            onPress={handleLogout}
-          />
+          <MenuItem icon={LogOut} title="Cerrar Sesión" onPress={handleLogout} />
         </View>
       </View>
     </ScrollView>

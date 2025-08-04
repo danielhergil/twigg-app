@@ -1,5 +1,4 @@
 // login.tsx
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -25,7 +24,6 @@ import IcGoogle from '@/assets/images/ic_google.png';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { signInWithPopup } from 'firebase/auth';
 import Constants from 'expo-constants';
-
 // --- Firebase imports ---
 import { auth, db } from '@/config/firebase';
 import {
@@ -34,8 +32,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { ensureGoogleSigninConfigured } from '@/utils/googleSignIn';
 
 // Extraer webClientId desde extras de expoConfig
@@ -117,7 +114,7 @@ const Form: React.FC<FormProps> = ({
   const hasValidName = !isSignUp || fullName.trim().length > 0;
   const isFormValid =
     email.trim().length > 0 && password.length >= 6 && isValidEmail && hasValidName;
-
+  
   return (
     <View style={styles.form}>
       {isSignUp && (
@@ -272,7 +269,6 @@ export default function LoginScreen() {
     const emailTrimmed = email.trim();
     const isValidEmail = emailTrimmed.includes('@') && emailTrimmed.includes('.');
     if (!isValidEmail || password.length < 6 || (isSignUp && fullName.trim().length === 0)) return;
-
     setLoading(true);
     try {
       if (isSignUp) {
@@ -283,7 +279,6 @@ export default function LoginScreen() {
           password
         );
         const user = userCredential.user;
-
         // Crear documento en Firestore
         await setDoc(doc(db, 'users', user.uid), {
           name: fullName.trim(),
@@ -299,12 +294,10 @@ export default function LoginScreen() {
         // Login
         await signInWithEmailAndPassword(auth, emailTrimmed, password);
       }
-
       router.replace('/(tabs)');
     } catch (e: any) {
       console.error('Error auth email/pass:', e);
       let mensaje = 'Ocurrió un error. Intenta de nuevo.';
-
       if (e.code) {
         switch (e.code) {
           case 'auth/email-already-in-use':
@@ -329,7 +322,6 @@ export default function LoginScreen() {
       } else if (e.message) {
         mensaje = e.message;
       }
-
       alert(mensaje);
     } finally {
       setLoading(false);
@@ -340,16 +332,13 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     try {
       ensureGoogleSigninConfigured();
-
       if (!isWeb) {
         await GoogleSignin.hasPlayServices();
         const userInfo = await GoogleSignin.signIn();
         const idToken = userInfo.data?.idToken;
-
         if (!idToken) {
           throw new Error('No se obtuvo el ID token de Google');
         }
-
         const credential = GoogleAuthProvider.credential(idToken);
         await signInWithCredential(auth, credential);
       } else {
@@ -357,12 +346,19 @@ export default function LoginScreen() {
         await signInWithPopup(auth, provider);
       }
 
-      // Crear o mergear documento de usuario en Firestore
+      // Create or merge user document in Firestore
       const user = auth.currentUser;
       if (user) {
-        await setDoc(
-          doc(db, 'users', user.uid),
-          {
+        console.log("Processing user document for:", user.uid);
+        
+        // Check if user document already exists in Firestore
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (!userDocSnap.exists()) {
+          // New user - create document with all fields including createdAt
+          console.log("Creating new user document");
+          await setDoc(userDocRef, {
             name: user.displayName ?? '',
             email: user.email,
             avatar: user.photoURL || '',
@@ -370,16 +366,27 @@ export default function LoginScreen() {
             coursesCompleted: 0,
             coursesInProgress: 0,
             coursesCreated: 0,
-            createdAt: new Date(), // si ya existe, este campo no se sobreescribe porque usamos merge
-          },
-          { merge: true } // conserva lo que ya haya (progreso, logros, etc.)
-        );
+            createdAt: new Date(), // Only set for new users
+          });
+        } else {
+          // Existing user - just update basic info if needed, but don't overwrite existing data
+          console.log("Updating existing user document");
+          await setDoc(userDocRef, {
+            name: user.displayName ?? '',
+            email: user.email,
+            avatar: user.photoURL || '',
+          }, { merge: true }); // Only update the fields we care about
+        }
+        
+        console.log("Firestore document processed successfully");
       }
-
       router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Error en login con Google:', error);
-
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+      
       if (error.code === 'auth/popup-closed-by-user') {
         console.log('Popup cerrado por el usuario');
       } else if (error.code === 'auth/web-storage-unsupported') {
