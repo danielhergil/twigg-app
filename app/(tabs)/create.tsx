@@ -35,14 +35,11 @@ import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-
 const { width } = Dimensions.get('window');
-
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
 // --- Colores Vibrantes Personalizados ---
 const VibrantColors = {
   primary: '#7e22ce',
@@ -59,9 +56,7 @@ const VibrantColors = {
   sidebarBackground: 'rgba(126, 34, 206, 0.1)',
   headerBackground: 'rgba(126, 34, 206, 0.2)',
 };
-
 const levels = ['Básico', 'Intermedio', 'Avanzado'];
-
 const handleLogout = async () => {
   try {
     await signOut(auth);
@@ -74,14 +69,12 @@ const handleLogout = async () => {
     alert('No se pudo cerrar sesión. Intenta de nuevo.');
   }
 };
-
 type LevelButtonProps = {
   levelOption: string;
   current: string;
   onPress: () => void;
   compact?: boolean;
 };
-
 const LevelButton = ({ levelOption, current, onPress, compact = false }: LevelButtonProps) => (
   <TouchableOpacity
     style={[
@@ -101,7 +94,6 @@ const LevelButton = ({ levelOption, current, onPress, compact = false }: LevelBu
     </Text>
   </TouchableOpacity>
 );
-
 // Tipado mínimo según respuesta de draft
 interface Lesson {
   lessonTitle: string;
@@ -122,7 +114,6 @@ interface Outline {
   modules: Module[];
   [key: string]: any;
 }
-
 const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) => (
   <TouchableOpacity
     style={[styles.navItem, isActive && styles.navItemActive]}
@@ -132,7 +123,6 @@ const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) =
     <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>{label}</Text>
   </TouchableOpacity>
 );
-
 // Tarjeta de módulo (solo títulos y topicTitle)
 const ModuleCard = ({ module, index }: { module: Module; index: number }) => {
   const [open, setOpen] = useState(false);
@@ -163,7 +153,6 @@ const ModuleCard = ({ module, index }: { module: Module; index: number }) => {
     </View>
   );
 };
-
 // ---------- BACKEND URL HELPERS ----------
 /**
  * Sustituye '192.168.x.y' por la IP local de tu máquina en la red cuando pruebes desde dispositivo físico.
@@ -178,7 +167,6 @@ const getBackendBaseUrl = () => {
   return `http://${LOCAL_BACKEND_IP}:8000`;
 };
 // -----------------------------------------
-
 export default function CreateScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -189,8 +177,8 @@ export default function CreateScreen() {
   const [modules, setModules] = useState<Module[]>([]);
   const [draftFinal, setDraftFinal] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false); // Nuevo estado para el botón de publicar
   const anyModuleReceived = modules.length > 0;
-
   const resetAll = () => {
     setTitle('');
     setDescription('');
@@ -201,20 +189,18 @@ export default function CreateScreen() {
     setDraftFinal(null);
     setError(null);
     setIsGenerating(false);
+    setIsPublishing(false);
   };
-
   const handleGenerateCourse = useCallback(async () => {
     if (!title.trim() || !description.trim() || !duration.trim()) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos');
       return;
     }
-
     setIsGenerating(true);
     setOutline(null);
     setModules([]);
     setDraftFinal(null);
     setError(null);
-
     let idToken = '';
     try {
       const user = auth.currentUser;
@@ -224,19 +210,16 @@ export default function CreateScreen() {
     } catch (e: any) {
       console.warn('No se pudo obtener token:', e);
     }
-
     const payload = {
       courseTitle: title,
       level,
       durationWeeks: parseInt(duration, 10),
       description,
     };
-
     // Diferenciar: en web usamos streaming SSE, en mobile fallback a polling
     if (isWeb) {
       // SSE como antes
       const streamUrl = `${getBackendBaseUrl()}/generate-draft-stream`;
-
       const controller = new AbortController();
       const signal = controller.signal;
       let lastActivity = Date.now();
@@ -245,7 +228,6 @@ export default function CreateScreen() {
           controller.abort();
         }
       }, 5000);
-
       try {
         const resp = await fetch(streamUrl, {
           method: 'POST',
@@ -256,27 +238,22 @@ export default function CreateScreen() {
           body: JSON.stringify(payload),
           signal,
         });
-
         if (!resp.body) {
           throw new Error('Stream no disponible');
         }
-
         const reader = resp.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
         const newModules: Module[] = [];
         let partialOutline: Outline | null = null;
         let finalDraft: any = null;
-
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           lastActivity = Date.now();
           buffer += decoder.decode(value, { stream: true });
-
-          const parts = buffer.split('\n\n');
+          const parts = buffer.split('\n');
           buffer = parts.pop() || '';
-
           for (const part of parts) {
             if (!part.trim()) continue;
             const lines = part.split('\n');
@@ -342,7 +319,6 @@ export default function CreateScreen() {
         setModules([]);
         setOutline(null);
         setDraftFinal(null);
-
         // 2. Polling
         const polling = setInterval(async () => {
           try {
@@ -373,9 +349,67 @@ export default function CreateScreen() {
       }
     }
   }, [title, description, duration, level, isWeb]);
-
+  
+  // Nueva función para publicar el curso
+  const handlePublishCourse = useCallback(async () => {
+    if (!draftFinal || !outline) {
+      Alert.alert('Error', 'No hay curso para publicar');
+      return;
+    }
+    
+    setIsPublishing(true);
+    setError(null);
+    
+    let idToken = '';
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        idToken = await user.getIdToken();
+      }
+    } catch (e: any) {
+      console.warn('No se pudo obtener token:', e);
+    }
+    
+    try {
+      // Llamada al backend para publicar el draft
+      const publishResp = await fetch(`${getBackendBaseUrl()}/publish-draft/${draftFinal.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: idToken ? `Bearer ${idToken}` : '',
+        },
+        body: JSON.stringify({
+          thumbnail: "", // Puedes agregar un campo para thumbnail si lo deseas
+        }),
+      });
+      
+      if (!publishResp.ok) {
+        const errorData = await publishResp.json();
+        throw new Error(errorData.detail || 'Error al publicar el curso');
+      }
+      
+      const result = await publishResp.json();
+      Alert.alert('Éxito', 'Curso publicado correctamente', [
+        { 
+          text: 'OK', 
+          onPress: () => {
+            router.push(`/course/${result.course.id}`);
+          }
+        }
+      ]);
+      
+      // Resetear todo después de publicar
+      resetAll();
+    } catch (e: any) {
+      console.error('Error publicando curso:', e);
+      setError(e.message || 'Error al publicar el curso');
+      Alert.alert('Error', e.message || 'Error al publicar el curso');
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [draftFinal, outline, isWeb]);
+  
   // Renderers y UI se mantienen igual que tenías, con formulario inicial ocultándose cuando hay módulos/draftFinal.
-
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
       {/* Sidebar */}
@@ -417,7 +451,6 @@ export default function CreateScreen() {
           </TouchableOpacity>
         </View>
       </View>
-
       {/* Main Content */}
       <ScrollView style={styles.webMainContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.webHeaderContainer, styles.webHeaderContainerCompact]}>
@@ -435,7 +468,6 @@ export default function CreateScreen() {
             </View>
           </View>
         </View>
-
         {!anyModuleReceived && !draftFinal && (
           <View style={[styles.webContentCard, styles.webContentCardCompact]}>
             <View style={[styles.infoBox, styles.infoBoxCompact]}>
@@ -450,7 +482,6 @@ export default function CreateScreen() {
                 <Text>4. Publica tu curso para que otros puedan acceder</Text>
               </Text>
             </View>
-
             <View style={styles.webForm}>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Título del Curso *</Text>
@@ -464,7 +495,6 @@ export default function CreateScreen() {
                   numberOfLines={2}
                 />
               </View>
-
               <View style={styles.webInputRow}>
                 <View style={[styles.inputGroup, { flex: 1, marginRight: getSpacing('md') }]}>
                   <Text style={styles.label}>Duración (semanas) *</Text>
@@ -492,7 +522,6 @@ export default function CreateScreen() {
                   </View>
                 </View>
               </View>
-
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Descripción y Enfoque *</Text>
                 <Text style={styles.labelSubtext}>
@@ -509,7 +538,6 @@ export default function CreateScreen() {
                   textAlignVertical="top"
                 />
               </View>
-
               <TouchableOpacity
                 style={[
                   styles.generateButton,
@@ -539,7 +567,6 @@ export default function CreateScreen() {
             </View>
           </View>
         )}
-
         {(anyModuleReceived || draftFinal) && (
           <View style={[styles.webContentCard, styles.webContentCardCompact]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -555,20 +582,34 @@ export default function CreateScreen() {
                 <Text style={{ fontWeight: '600' }}>Reiniciar</Text>
               </TouchableOpacity>
             </View>
-
             {outline && (
               <View style={{ marginTop: getSpacing('sm') }}>
                 <Text style={{ fontWeight: '600' }}>{`Módulos esperados: ${outline.modules?.length || 0}`}</Text>
               </View>
             )}
-
             {modules.map((mod, idx) => (
               <ModuleCard key={idx} module={mod} index={idx} />
             ))}
+            
+            {/* Botón de publicar curso */}
+            <TouchableOpacity
+              style={[
+                styles.publishButton,
+                isPublishing && styles.publishButtonDisabled,
+                styles.publishButtonCompact,
+              ]}
+              onPress={handlePublishCourse}
+              disabled={isPublishing}
+            >
+              <View style={styles.publishButtonContent}>
+                <Text style={styles.publishButtonText}>
+                  {isPublishing ? 'Publicando curso...' : 'Crear este curso'}
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
-
       {/* Overlay spinner semi-transparente */}
       {isGenerating && (
         <View style={styles.overlay}>
@@ -593,7 +634,6 @@ export default function CreateScreen() {
           Describe tu curso y la IA generará la estructura progresivamente
         </Text>
       </View>
-
       {!anyModuleReceived && !draftFinal && (
         <View style={styles.form}>
           <View style={styles.inputGroup}>
@@ -684,7 +724,6 @@ export default function CreateScreen() {
           </View>
         </View>
       )}
-
       {(anyModuleReceived || draftFinal) && (
         <View style={[styles.resultContainer, { marginHorizontal: getSpacing('lg') }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -708,9 +747,24 @@ export default function CreateScreen() {
           {modules.map((mod, idx) => (
             <ModuleCard key={idx} module={mod} index={idx} />
           ))}
+          
+          {/* Botón de publicar curso */}
+          <TouchableOpacity
+            style={[
+              styles.publishButton,
+              isPublishing && styles.publishButtonDisabled,
+            ]}
+            onPress={handlePublishCourse}
+            disabled={isPublishing}
+          >
+            <View style={styles.publishButtonContent}>
+              <Text style={styles.publishButtonText}>
+                {isPublishing ? 'Publicando curso...' : 'Crear este curso'}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
       )}
-
       {isGenerating && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" />
@@ -724,14 +778,12 @@ export default function CreateScreen() {
       )}
     </ScrollView>
   );
-
   return (
     <SafeAreaView style={styles.container}>
       {isWeb && isDesktop ? renderWebLayout() : renderMobileLayout()}
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -985,7 +1037,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginTop: getSpacing('sm'),
   },
-
   // Common
   inputGroup: {
     gap: getSpacing('sm'),
@@ -1171,5 +1222,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 50,
     gap: 8,
+  },
+  
+  // Estilos para el botón de publicar
+  publishButton: {
+    backgroundColor: VibrantColors.success,
+    borderRadius: 16,
+    padding: getSpacing('lg'),
+    alignItems: 'center',
+    marginTop: getSpacing('lg'),
+    shadowColor: VibrantColors.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  publishButtonCompact: {
+    paddingVertical: getSpacing('sm'),
+    paddingHorizontal: getSpacing('lg'),
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  publishButtonDisabled: {
+    backgroundColor: VibrantColors.textSecondary,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  publishButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing('sm'),
+  },
+  publishButtonText: {
+    color: VibrantColors.surface,
+    fontSize: getFontSize('md'),
+    fontWeight: '600',
   },
 });
