@@ -1,5 +1,5 @@
 // app/(tabs)/create.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,10 @@ import {
   Alert,
   Dimensions,
   Image,
+  ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import {
   Sparkles,
@@ -24,7 +28,6 @@ import {
   Settings,
   LogOut,
 } from 'lucide-react-native';
-import { Colors } from '@/constants/Colors';
 import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
 import { dummyUser } from '@/data/dummyData';
 import TwiggLogo from '@/assets/images/twigg_logo.png';
@@ -35,21 +38,26 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const { width } = Dimensions.get('window');
 
-// --- Colores Vibrantes Personalizados (iguales a explore) ---
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// --- Colores Vibrantes Personalizados ---
 const VibrantColors = {
-  primary: '#7e22ce', // Morado más intenso
-  secondary: '#f59e0b', // Ámbar
-  accent: '#ec4899', // Rosa
-  success: '#10b981', // Verde esmeralda
-  danger: '#ef4444', // Rojo
-  backgroundSecondary: '#f8fafc', // Fondo muy claro
-  surface: '#ffffff', // Blanco puro para tarjetas
-  text: '#1e293b', // Gris oscuro
-  textSecondary: '#64748b', // Gris medio
-  borderLight: '#cbd5e1', // Gris claro para bordes
-  shadow: '#000000', // Sombra más oscura
-  sidebarBackground: 'rgba(126, 34, 206, 0.1)', // Fondo del sidebar más intenso
-  headerBackground: 'rgba(126, 34, 206, 0.2)', // Fondo del header más intenso
+  primary: '#7e22ce',
+  secondary: '#f59e0b',
+  accent: '#ec4899',
+  success: '#10b981',
+  danger: '#ef4444',
+  backgroundSecondary: '#f8fafc',
+  surface: '#ffffff',
+  text: '#1e293b',
+  textSecondary: '#64748b',
+  borderLight: '#cbd5e1',
+  shadow: '#000000',
+  sidebarBackground: 'rgba(126, 34, 206, 0.1)',
+  headerBackground: 'rgba(126, 34, 206, 0.2)',
 };
 
 const levels = ['Básico', 'Intermedio', 'Avanzado'];
@@ -94,6 +102,27 @@ const LevelButton = ({ levelOption, current, onPress, compact = false }: LevelBu
   </TouchableOpacity>
 );
 
+// Tipado mínimo según respuesta de draft
+interface Lesson {
+  lessonTitle: string;
+  theory?: string;
+  tests?: any[];
+}
+interface Topic {
+  topicTitle: string;
+  lessons: Lesson[];
+}
+interface Module {
+  moduleNumber: number;
+  moduleTitle: string;
+  weeks: number[];
+  topics: Topic[];
+}
+interface Outline {
+  modules: Module[];
+  [key: string]: any;
+}
+
 const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) => (
   <TouchableOpacity
     style={[styles.navItem, isActive && styles.navItemActive]}
@@ -104,33 +133,252 @@ const NavigationItem = ({ icon: Icon, label, isActive = false, onPress }: any) =
   </TouchableOpacity>
 );
 
+// Tarjeta de módulo (solo títulos y topicTitle)
+const ModuleCard = ({ module, index }: { module: Module; index: number }) => {
+  const [open, setOpen] = useState(false);
+  const toggle = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpen(o => !o);
+  };
+  return (
+    <View style={styles.moduleCard}>
+      <TouchableOpacity onPress={toggle} style={styles.moduleHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.moduleTitle}>
+            {module.moduleNumber}. {module.moduleTitle}
+          </Text>
+          <Text style={styles.moduleWeeks}>Semanas: {module.weeks.join(', ')}</Text>
+        </View>
+        <Text style={styles.toggleArrow}>{open ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={styles.moduleBody}>
+          {module.topics.map((topic, ti) => (
+            <View key={ti} style={styles.topicBlock}>
+              <Text style={styles.topicTitle}>• {topic.topicTitle}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
+// ---------- BACKEND URL HELPERS ----------
+/**
+ * Sustituye '192.168.x.y' por la IP local de tu máquina en la red cuando pruebes desde dispositivo físico.
+ */
+const LOCAL_BACKEND_IP = '192.168.1.144'; // <-- reemplaza con tu IP local real
+const getBackendBaseUrl = () => {
+  if (Platform.OS === 'android' && !isWeb) {
+    // Si estás usando emulador Android estándar, 10.0.2.2 mapea al localhost de la máquina
+    return `http://${LOCAL_BACKEND_IP}:8000`;
+  }
+  // Para iOS simulator o dispositivo físico, usar IP local de la máquina
+  return `http://${LOCAL_BACKEND_IP}:8000`;
+};
+// -----------------------------------------
+
 export default function CreateScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [duration, setDuration] = useState('');
+  const [duration, setDuration] = useState('12');
   const [level, setLevel] = useState('Básico');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [outline, setOutline] = useState<Outline | null>(null);
+  const [modules, setModules] = useState<Module[]>([]);
+  const [draftFinal, setDraftFinal] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const anyModuleReceived = modules.length > 0;
 
-  const handleGenerateCourse = async () => {
+  const resetAll = () => {
+    setTitle('');
+    setDescription('');
+    setDuration('12');
+    setLevel('Básico');
+    setOutline(null);
+    setModules([]);
+    setDraftFinal(null);
+    setError(null);
+    setIsGenerating(false);
+  };
+
+  const handleGenerateCourse = useCallback(async () => {
     if (!title.trim() || !description.trim() || !duration.trim()) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos');
       return;
     }
+
     setIsGenerating(true);
-    // Simulamos la generación del curso
-    setTimeout(() => {
-      setIsGenerating(false);
-      Alert.alert(
-        'Curso Generado',
-        '¡Tu curso ha sido generado exitosamente con IA!',
-        [{ text: 'Ver Curso', onPress: () => console.log('Ver curso generado') }]
-      );
-    }, 3000);
-  };
+    setOutline(null);
+    setModules([]);
+    setDraftFinal(null);
+    setError(null);
+
+    let idToken = '';
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        idToken = await user.getIdToken();
+      }
+    } catch (e: any) {
+      console.warn('No se pudo obtener token:', e);
+    }
+
+    const payload = {
+      courseTitle: title,
+      level,
+      durationWeeks: parseInt(duration, 10),
+      description,
+    };
+
+    // Diferenciar: en web usamos streaming SSE, en mobile fallback a polling
+    if (isWeb) {
+      // SSE como antes
+      const streamUrl = `${getBackendBaseUrl()}/generate-draft-stream`;
+
+      const controller = new AbortController();
+      const signal = controller.signal;
+      let lastActivity = Date.now();
+      const activityInterval = setInterval(() => {
+        if (Date.now() - lastActivity > 30000) {
+          controller.abort();
+        }
+      }, 5000);
+
+      try {
+        const resp = await fetch(streamUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: idToken ? `Bearer ${idToken}` : '',
+          },
+          body: JSON.stringify(payload),
+          signal,
+        });
+
+        if (!resp.body) {
+          throw new Error('Stream no disponible');
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        const newModules: Module[] = [];
+        let partialOutline: Outline | null = null;
+        let finalDraft: any = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          lastActivity = Date.now();
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            const lines = part.split('\n');
+            let eventType = '';
+            let dataLine = '';
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                eventType = line.replace('event:', '').trim();
+              } else if (line.startsWith('data:')) {
+                dataLine += line.replace('data:', '').trim();
+              }
+            }
+            if (!dataLine) continue;
+            try {
+              const parsed = JSON.parse(dataLine);
+              if (eventType === 'outline' && parsed.outline) {
+                partialOutline = parsed.outline;
+                setOutline(parsed.outline);
+              } else if (eventType === 'module' && parsed.module) {
+                newModules.push(parsed.module);
+                setModules([...newModules]);
+              } else if (eventType === 'done' && parsed.draft) {
+                finalDraft = parsed.draft;
+                setDraftFinal(parsed.draft);
+                if ((!newModules.length || !partialOutline) && parsed.draft.modules) {
+                  setModules(parsed.draft.modules);
+                }
+              } else if (eventType === 'error') {
+                setError(parsed.error || 'Error desconocido');
+              }
+            } catch (e) {
+              console.warn('Error parseando chunk SSE:', e, dataLine);
+            }
+          }
+        }
+      } catch (e: any) {
+        if (e.name === 'AbortError') {
+          setError('La conexión se tardó demasiado y se abortó. Intenta de nuevo.');
+        } else {
+          console.error('Error generando curso:', e);
+          setError(e.message || 'Error generando curso');
+        }
+      } finally {
+        clearInterval(activityInterval);
+        setIsGenerating(false);
+      }
+    } else {
+      // Mobile: polling con /generate-draft y luego /drafts/{id}/progress
+      try {
+        // 1. Crear draft
+        const createResp = await fetch(`${getBackendBaseUrl()}/generate-draft`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: idToken ? `Bearer ${idToken}` : '',
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!createResp.ok) {
+          throw new Error(`Falló creación del draft: ${createResp.statusText}`);
+        }
+        const { draftId } = await createResp.json();
+        setModules([]);
+        setOutline(null);
+        setDraftFinal(null);
+
+        // 2. Polling
+        const polling = setInterval(async () => {
+          try {
+            const progResp = await fetch(`${getBackendBaseUrl()}/drafts/${draftId}/progress`, {
+              headers: {
+                Authorization: idToken ? `Bearer ${idToken}` : '',
+              },
+            });
+            if (!progResp.ok) return;
+            const { draft } = await progResp.json();
+            if (draft.modules) {
+              setOutline({ modules: draft.modules });
+              setModules(draft.modules);
+            }
+            if (draft.status && draft.status !== 'generating') {
+              setDraftFinal(draft);
+              setIsGenerating(false);
+              clearInterval(polling);
+            }
+          } catch (e) {
+            console.warn('Polling error', e);
+          }
+        }, 1500);
+      } catch (e: any) {
+        console.error('Error generando curso (mobile):', e);
+        setError(e.message || 'Error generando curso');
+        setIsGenerating(false);
+      }
+    }
+  }, [title, description, duration, level, isWeb]);
+
+  // Renderers y UI se mantienen igual que tenías, con formulario inicial ocultándose cuando hay módulos/draftFinal.
 
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
-      {/* Sidebar - Copiada exactamente de explore.tsx */}
+      {/* Sidebar */}
       <View style={styles.webSidebar}>
         <ScrollView
           contentContainerStyle={styles.webSidebarContent}
@@ -170,13 +418,15 @@ export default function CreateScreen() {
         </View>
       </View>
 
-      {/* Main Content - Compactado en web */}
+      {/* Main Content */}
       <ScrollView style={styles.webMainContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.webHeaderContainer, styles.webHeaderContainerCompact]}>
           <View style={styles.webHeader}>
             <View>
               <Text style={styles.webGreeting}>Crear Curso con IA</Text>
-              <Text style={styles.webSubtitle}>Describe tu curso y la IA generará el contenido completo</Text>
+              <Text style={styles.webSubtitle}>
+                Describe tu curso y la IA generará la estructura progresivamente
+              </Text>
             </View>
             <View style={styles.webHeaderActions}>
               <TouchableOpacity style={styles.notificationButton}>
@@ -186,105 +436,151 @@ export default function CreateScreen() {
           </View>
         </View>
 
-        <View style={[styles.webContentCard, styles.webContentCardCompact]}>
-          <View style={[styles.infoBox, styles.infoBoxCompact]}>
-            <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
-            <Text style={styles.infoText}>
-              <Text>1. Completa la información básica del curso</Text>
-              <Text>{"\n"}</Text>
-              <Text>2. Nuestra IA generará módulos, lecciones y evaluaciones</Text>
-              <Text>{"\n"}</Text>
-              <Text>3. Podrás editar y personalizar el contenido generado</Text>
-              <Text>{"\n"}</Text>
-              <Text>4. Publica tu curso para que otros puedan acceder</Text>
-            </Text>
-          </View>
-
-          <View style={styles.webForm}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Título del Curso *</Text>
-              <TextInput
-                style={[styles.webInput, styles.webInputCompact]}
-                placeholder="Ej: Introducción a React Native"
-                placeholderTextColor={VibrantColors.textSecondary}
-                value={title}
-                onChangeText={setTitle}
-                multiline
-                numberOfLines={2}
-              />
+        {!anyModuleReceived && !draftFinal && (
+          <View style={[styles.webContentCard, styles.webContentCardCompact]}>
+            <View style={[styles.infoBox, styles.infoBoxCompact]}>
+              <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
+              <Text style={styles.infoText}>
+                <Text>1. Completa la información básica del curso</Text>
+                {'\n'}
+                <Text>2. Nuestra IA generará módulos, lecciones y evaluaciones</Text>
+                {'\n'}
+                <Text>3. Podrás editar y personalizar el contenido generado</Text>
+                {'\n'}
+                <Text>4. Publica tu curso para que otros puedan acceder</Text>
+              </Text>
             </View>
 
-            <View style={styles.webInputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: getSpacing('md') }]}>
-                <Text style={styles.label}>Duración (semanas) *</Text>
+            <View style={styles.webForm}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Título del Curso *</Text>
                 <TextInput
                   style={[styles.webInput, styles.webInputCompact]}
-                  placeholder="Ej: 8"
+                  placeholder="Ej: Acupuntura para principiantes"
                   placeholderTextColor={VibrantColors.textSecondary}
-                  value={duration}
-                  onChangeText={setDuration}
-                  keyboardType="numeric"
+                  value={title}
+                  onChangeText={setTitle}
+                  multiline
+                  numberOfLines={2}
                 />
               </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Nivel de Dificultad</Text>
-                <View style={styles.webLevelContainer}>
-                  {levels.map((levelOption) => (
-                    <LevelButton
-                      key={levelOption}
-                      levelOption={levelOption}
-                      current={level}
-                      onPress={() => setLevel(levelOption)}
-                      compact
-                    />
-                  ))}
+
+              <View style={styles.webInputRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: getSpacing('md') }]}>
+                  <Text style={styles.label}>Duración (semanas) *</Text>
+                  <TextInput
+                    style={[styles.webInput, styles.webInputCompact]}
+                    placeholder="Ej: 12"
+                    placeholderTextColor={VibrantColors.textSecondary}
+                    value={duration}
+                    onChangeText={setDuration}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.label}>Nivel de Dificultad</Text>
+                  <View style={styles.webLevelContainer}>
+                    {levels.map(lv => (
+                      <LevelButton
+                        key={lv}
+                        levelOption={lv}
+                        current={level}
+                        onPress={() => setLevel(lv)}
+                        compact
+                      />
+                    ))}
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Descripción y Enfoque del Curso *</Text>
-              <Text style={styles.labelSubtext}>
-                Describe qué quieres enseñar, objetivos, público objetivo, etc.
-              </Text>
-              <TextInput
-                style={[styles.webInput, styles.webTextArea, styles.webInputCompact]}
-                placeholder="Describe el enfoque, objetivos y contenido que quieres que tenga tu curso..."
-                placeholderTextColor={VibrantColors.textSecondary}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={8}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.generateButton,
-                isGenerating && styles.generateButtonDisabled,
-                styles.generateButtonCompact,
-              ]}
-              onPress={handleGenerateCourse}
-              disabled={isGenerating}
-            >
-              <View style={styles.generateButtonContent}>
-                <Sparkles
-                  size={20}
-                  color={VibrantColors.surface}
-                  style={isGenerating ? styles.spinningIcon : {}}
-                />
-                <Text style={styles.generateButtonText}>
-                  {isGenerating ? 'Generando Curso...' : 'Generar Curso con IA'}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Descripción y Enfoque *</Text>
+                <Text style={styles.labelSubtext}>
+                  Describe qué quieres enseñar, objetivos, público objetivo, etc.
                 </Text>
-                {!isGenerating && (
-                  <ArrowRight size={20} color={VibrantColors.surface} />
+                <TextInput
+                  style={[styles.webInput, styles.webTextArea, styles.webInputCompact]}
+                  placeholder="Aprende acupuntura desde cero..."
+                  placeholderTextColor={VibrantColors.textSecondary}
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.generateButton,
+                  isGenerating && styles.generateButtonDisabled,
+                  styles.generateButtonCompact,
+                ]}
+                onPress={handleGenerateCourse}
+                disabled={isGenerating}
+              >
+                <View style={styles.generateButtonContent}>
+                  <Sparkles
+                    size={20}
+                    color={VibrantColors.surface}
+                    style={isGenerating ? styles.spinningIcon : {}}
+                  />
+                  <Text style={styles.generateButtonText}>
+                    {isGenerating ? 'Generando Curso...' : 'Generar Curso con IA'}
+                  </Text>
+                  {!isGenerating && <ArrowRight size={20} color={VibrantColors.surface} />}
+                </View>
+              </TouchableOpacity>
+              {error && (
+                <Text style={{ color: VibrantColors.danger, marginTop: getSpacing('sm') }}>
+                  {error}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {(anyModuleReceived || draftFinal) && (
+          <View style={[styles.webContentCard, styles.webContentCardCompact]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Text style={{ fontSize: 20, fontWeight: '700' }}>Estructura del curso</Text>
+                {draftFinal && (
+                  <Text style={{ color: VibrantColors.textSecondary, marginTop: 4 }}>
+                    {draftFinal.courseTitle || title}
+                  </Text>
                 )}
               </View>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={resetAll} style={{ padding: 8, backgroundColor: '#eee', borderRadius: 8 }}>
+                <Text style={{ fontWeight: '600' }}>Reiniciar</Text>
+              </TouchableOpacity>
+            </View>
+
+            {outline && (
+              <View style={{ marginTop: getSpacing('sm') }}>
+                <Text style={{ fontWeight: '600' }}>{`Módulos esperados: ${outline.modules?.length || 0}`}</Text>
+              </View>
+            )}
+
+            {modules.map((mod, idx) => (
+              <ModuleCard key={idx} module={mod} index={idx} />
+            ))}
           </View>
-        </View>
+        )}
       </ScrollView>
+
+      {/* Overlay spinner semi-transparente */}
+      {isGenerating && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" />
+          <Text style={{ marginTop: 8, color: '#fff' }}>Generando curso... </Text>
+          {modules.length > 0 && (
+            <Text style={{ marginTop: 4, color: '#fff' }}>
+              Módulos recibidos: {modules.length}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 
@@ -294,94 +590,138 @@ export default function CreateScreen() {
         <Sparkles size={32} color={VibrantColors.primary} />
         <Text style={styles.title}>Crear Curso con IA</Text>
         <Text style={styles.subtitle}>
-          Describe tu curso y la IA generará el contenido completo para ti
+          Describe tu curso y la IA generará la estructura progresivamente
         </Text>
       </View>
-      <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Título del Curso *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ej: Introducción a React Native"
-            placeholderTextColor={VibrantColors.textSecondary}
-            value={title}
-            onChangeText={setTitle}
-            multiline
-            numberOfLines={2}
-          />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Duración (en semanas) *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ej: 8"
-            placeholderTextColor={VibrantColors.textSecondary}
-            value={duration}
-            onChangeText={setDuration}
-            keyboardType="numeric"
-          />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Nivel de Dificultad</Text>
-          <View style={styles.levelContainer}>
-            {levels.map((levelOption) => (
-              <LevelButton
-                key={levelOption}
-                levelOption={levelOption}
-                current={level}
-                onPress={() => setLevel(levelOption)}
-              />
-            ))}
-          </View>
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Descripción y Enfoque del Curso *</Text>
-          <Text style={styles.labelSubtext}>
-            Describe qué quieres enseñar, objetivos, público objetivo, etc.
-          </Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Describe el enfoque, objetivos y contenido que quieres que tenga tu curso..."
-            placeholderTextColor={VibrantColors.textSecondary}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={6}
-            textAlignVertical="top"
-          />
-        </View>
-        <TouchableOpacity
-          style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
-          onPress={handleGenerateCourse}
-          disabled={isGenerating}
-        >
-          <View style={styles.generateButtonContent}>
-            <Sparkles
-              size={20}
-              color={VibrantColors.surface}
-              style={isGenerating ? styles.spinningIcon : {}}
+
+      {!anyModuleReceived && !draftFinal && (
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Título del Curso *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ej: Acupuntura para principiantes"
+              placeholderTextColor={VibrantColors.textSecondary}
+              value={title}
+              onChangeText={setTitle}
+              multiline
+              numberOfLines={2}
             />
-            <Text style={styles.generateButtonText}>
-              {isGenerating ? 'Generando Curso...' : 'Generar Curso con IA'}
-            </Text>
-            {!isGenerating && (
-              <ArrowRight size={20} color={VibrantColors.surface} />
-            )}
           </View>
-        </TouchableOpacity>
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
-          <Text style={styles.infoText}>
-            <Text>1. Completa la información básica del curso</Text>
-            <Text>{"\n"}</Text>
-            <Text>2. Nuestra IA generará módulos, lecciones y evaluaciones</Text>
-            <Text>{"\n"}</Text>
-            <Text>3. Podrás editar y personalizar el contenido generado</Text>
-            <Text>{"\n"}</Text>
-            <Text>4. Publica tu curso para que otros puedan acceder</Text>
-          </Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Duración (en semanas) *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Ej: 12"
+              placeholderTextColor={VibrantColors.textSecondary}
+              value={duration}
+              onChangeText={setDuration}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nivel de Dificultad</Text>
+            <View style={styles.levelContainer}>
+              {levels.map(lv => (
+                <LevelButton
+                  key={lv}
+                  levelOption={lv}
+                  current={level}
+                  onPress={() => setLevel(lv)}
+                />
+              ))}
+            </View>
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Descripción y Enfoque *</Text>
+            <Text style={styles.labelSubtext}>
+              Describe qué quieres enseñar, objetivos, público objetivo, etc.
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Aprende acupuntura desde cero..."
+              placeholderTextColor={VibrantColors.textSecondary}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+            />
+          </View>
+          <TouchableOpacity
+            style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+            onPress={handleGenerateCourse}
+            disabled={isGenerating}
+          >
+            <View style={styles.generateButtonContent}>
+              <Sparkles
+                size={20}
+                color={VibrantColors.surface}
+                style={isGenerating ? styles.spinningIcon : {}}
+              />
+              <Text style={styles.generateButtonText}>
+                {isGenerating ? 'Generando Curso...' : 'Generar Curso con IA'}
+              </Text>
+              {!isGenerating && <ArrowRight size={20} color={VibrantColors.surface} />}
+            </View>
+          </TouchableOpacity>
+          {error && (
+            <Text style={{ color: VibrantColors.danger, marginTop: getSpacing('sm') }}>
+              {error}
+            </Text>
+          )}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
+            <Text style={styles.infoText}>
+              <Text>1. Completa la información básica del curso</Text>
+              {'\n'}
+              <Text>2. Nuestra IA generará módulos, lecciones y evaluaciones</Text>
+              {'\n'}
+              <Text>3. Podrás editar y personalizar el contenido generado</Text>
+              {'\n'}
+              <Text>4. Publica tu curso para que otros puedan acceder</Text>
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
+
+      {(anyModuleReceived || draftFinal) && (
+        <View style={[styles.resultContainer, { marginHorizontal: getSpacing('lg') }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{ fontSize: 20, fontWeight: '700' }}>Estructura del curso</Text>
+              {draftFinal && (
+                <Text style={{ color: VibrantColors.textSecondary, marginTop: 4 }}>
+                  {draftFinal.courseTitle || title}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={resetAll} style={{ padding: 8, backgroundColor: '#eee', borderRadius: 8 }}>
+              <Text style={{ fontWeight: '600' }}>Reiniciar</Text>
+            </TouchableOpacity>
+          </View>
+          {outline && (
+            <View style={{ marginTop: getSpacing('sm') }}>
+              <Text style={{ fontWeight: '600' }}>{`Módulos esperados: ${outline.modules?.length || 0}`}</Text>
+            </View>
+          )}
+          {modules.map((mod, idx) => (
+            <ModuleCard key={idx} module={mod} index={idx} />
+          ))}
+        </View>
+      )}
+
+      {isGenerating && (
+        <View style={styles.overlay}>
+          <ActivityIndicator size="large" />
+          <Text style={{ marginTop: 8, color: '#fff' }}>Generando curso... </Text>
+          {modules.length > 0 && (
+            <Text style={{ marginTop: 4, color: '#fff' }}>
+              Módulos recibidos: {modules.length}
+            </Text>
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 
@@ -397,7 +737,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: VibrantColors.backgroundSecondary,
   },
-
   // Web Layout
   webContainer: {
     flex: 1,
@@ -407,8 +746,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: VibrantColors.backgroundSecondary,
   },
-
-  // Sidebar - Estilos copiados de explore.tsx
+  // Sidebar
   webSidebar: {
     width: 280,
     backgroundColor: VibrantColors.sidebarBackground,
@@ -510,8 +848,6 @@ const styles = StyleSheet.create({
     marginBottom: getSpacing('md'),
     marginTop: 30,
   },
-
-  // Main Content
   webMainContent: {
     flex: 1,
     padding: getSpacing('xl'),
@@ -526,7 +862,7 @@ const styles = StyleSheet.create({
     backgroundColor: VibrantColors.headerBackground,
     borderRadius: 16,
     marginBottom: getSpacing('lg'),
-    padding: getSpacing('md'), // reducido
+    padding: getSpacing('md'),
   },
   webHeader: {
     flexDirection: 'row',
@@ -557,8 +893,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 50,
   },
-
-  // Content Card
+  // Cards / form web
   webContentCard: {
     backgroundColor: VibrantColors.surface,
     borderRadius: 12,
@@ -570,11 +905,12 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: VibrantColors.borderLight,
+    marginBottom: getSpacing('xl'),
   },
   webContentCardCompact: {
     backgroundColor: VibrantColors.surface,
     borderRadius: 12,
-    padding: getSpacing('md'), // reducido
+    padding: getSpacing('md'),
     shadowColor: VibrantColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -582,9 +918,8 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: VibrantColors.borderLight,
+    marginBottom: getSpacing('lg'),
   },
-
-  // Info Box
   infoBox: {
     backgroundColor: VibrantColors.backgroundSecondary,
     borderRadius: 12,
@@ -596,7 +931,7 @@ const styles = StyleSheet.create({
   infoBoxCompact: {
     backgroundColor: VibrantColors.backgroundSecondary,
     borderRadius: 12,
-    padding: getSpacing('md'), // reducido
+    padding: getSpacing('md'),
     borderLeftWidth: 4,
     borderLeftColor: VibrantColors.primary,
     marginBottom: getSpacing('md'),
@@ -612,8 +947,6 @@ const styles = StyleSheet.create({
     color: VibrantColors.textSecondary,
     lineHeight: getFontSize('md') * 1.5,
   },
-
-  // Form
   webForm: {
     gap: getSpacing('xl'),
   },
@@ -653,7 +986,7 @@ const styles = StyleSheet.create({
     marginTop: getSpacing('sm'),
   },
 
-  // Common form elements
+  // Common
   inputGroup: {
     gap: getSpacing('sm'),
   },
@@ -667,8 +1000,6 @@ const styles = StyleSheet.create({
     color: VibrantColors.textSecondary,
     marginTop: -getSpacing('xs'),
   },
-
-  // Buttons
   levelButton: {
     backgroundColor: VibrantColors.surface,
     borderWidth: 1,
@@ -693,7 +1024,6 @@ const styles = StyleSheet.create({
   levelButtonTextActive: {
     color: VibrantColors.surface,
   },
-
   generateButton: {
     backgroundColor: VibrantColors.primary,
     borderRadius: 16,
@@ -707,7 +1037,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   generateButtonCompact: {
-    paddingVertical: getSpacing('sm'), // menos alto
+    paddingVertical: getSpacing('sm'),
     paddingHorizontal: getSpacing('lg'),
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -729,11 +1059,8 @@ const styles = StyleSheet.create({
     fontSize: getFontSize('md'),
     fontWeight: '600',
   },
-  spinningIcon: {
-    // En React Native no tenemos CSS animations nativas, pero esto es una referencia visual
-  },
-
-  // Mobile styles (mantenidos)
+  spinningIcon: {},
+  // Mobile (simple como antes)
   scrollView: {
     flex: 1,
   },
@@ -777,5 +1104,72 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: getSpacing('sm'),
     flexWrap: 'wrap',
+  },
+  resultContainer: {
+    backgroundColor: VibrantColors.surface,
+    borderRadius: 12,
+    padding: getSpacing('lg'),
+    shadowColor: VibrantColors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
+    marginTop: getSpacing('xl'),
+  },
+  // Módulos
+  moduleCard: {
+    backgroundColor: '#f9f9fc',
+    borderRadius: 12,
+    padding: getSpacing('md'),
+    marginTop: getSpacing('md'),
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  moduleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing('sm'),
+  },
+  moduleTitle: {
+    fontSize: getFontSize('md'),
+    fontWeight: '700',
+    color: VibrantColors.primary,
+  },
+  moduleWeeks: {
+    fontSize: getFontSize('xs'),
+    color: VibrantColors.textSecondary,
+    marginTop: 2,
+  },
+  toggleArrow: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: getSpacing('sm'),
+  },
+  moduleBody: {
+    marginTop: getSpacing('sm'),
+    paddingLeft: getSpacing('sm'),
+  },
+  topicBlock: {
+    marginBottom: getSpacing('xs'),
+  },
+  topicTitle: {
+    fontSize: getFontSize('sm'),
+    fontWeight: '500',
+    color: VibrantColors.text,
+  },
+  // Overlay
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(30,41,59,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
+    gap: 8,
   },
 });
