@@ -14,6 +14,7 @@ export default ({ config }) => ({
     firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
     firebaseAppId: process.env.FIREBASE_APP_ID,
     firebaseMeasurementId: process.env.FIREBASE_MEASUREMENT_ID,
-    webClientId: process.env.WEB_CLIENT_ID
+    webClientId: process.env.WEB_CLIENT_ID,
+    unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY,
   },
 });

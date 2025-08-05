@@ -27,6 +27,8 @@ import {
   User,
   Settings,
   LogOut,
+  Image as ImageIcon, // Importamos el icono de imagen
+  X, // Icono para cerrar
 } from 'lucide-react-native';
 import { getFontSize, getSpacing, isWeb, isDesktop } from '@/utils/responsive';
 import { dummyUser } from '@/data/dummyData';
@@ -36,6 +38,16 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useUserProfile } from '../../utils/useUserProfile';
+import { FlatList, Modal } from 'react-native';
+import Constants from 'expo-constants';
+const { unsplashAccessKey } = (Constants.expoConfig?.extra ?? {}) as Record<string, string>;
+
+const { width: screenWidth } = Dimensions.get('window');
+const CARD_WIDTH = isWeb && isDesktop
+  ? 320
+  : Math.round(screenWidth * 0.8);
+const CARD_IMAGE_HEIGHT = isWeb && isDesktop ? 180 : 160;
+
 const { width } = Dimensions.get('window');
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -181,6 +193,59 @@ export default function CreateScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false); // Nuevo estado para el botón de publicar
   const anyModuleReceived = modules.length > 0;
+  // Estados para Unsplash
+  const [searchTerm, setSearchTerm] = useState('');
+  const [imageResults, setImageResults] = useState<any[]>([]);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Función para buscar en Unsplash
+  // Fetch a Unsplash cuando se abra el picker o cambie el término
+  const searchImages = async (term: string, newPage = 1) => {
+    const query = term || title;
+    if (!query.trim()) return;
+
+    try {
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&page=${newPage}&per_page=20&client_id=${unsplashAccessKey}`
+      );
+      const json = await res.json();
+      // guardamos total de páginas para no pasarnos
+      setTotalPages(json.total_pages);
+
+      if (newPage === 1) {
+        setImageResults(json.results);
+      } else {
+        setImageResults(old => [...old, ...json.results]);
+      }
+    } catch (e) {
+      console.warn('Error buscando imágenes:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (showImagePicker) {
+      setPage(1);
+      setImageResults([]);
+      searchImages(searchTerm, 1);
+    }
+  }, [showImagePicker, searchTerm]);
+
+  const fetchMore = () => {
+    if (loadingMore) return;
+    // si aún hay páginas por delante
+    if (totalPages && page < totalPages) {
+      setLoadingMore(true);
+      const next = page + 1;
+      searchImages(searchTerm, next).then(() => {
+        setPage(next);
+        setLoadingMore(false);
+      });
+    }
+  };
+
   const resetAll = () => {
     setTitle('');
     setDescription('');
@@ -192,6 +257,7 @@ export default function CreateScreen() {
     setError(null);
     setIsGenerating(false);
     setIsPublishing(false);
+    setSelectedImageUrl(null); // Resetear imagen seleccionada
   };
   const handleGenerateCourse = useCallback(async () => {
     if (!title.trim() || !description.trim() || !duration.trim()) {
@@ -353,6 +419,12 @@ export default function CreateScreen() {
       Alert.alert('Error', 'No hay curso para publicar');
       return;
     }
+    console.log("Valor de selectedImageUrl al publicar:", selectedImageUrl);
+    // Validación adicional: si se ha seleccionado una imagen, debe tener URL
+    if (selectedImageUrl === null) {
+        Alert.alert('Imagen requerida', 'Por favor, selecciona una imagen para el curso.');
+        return;
+    }
     setIsPublishing(true);
     setError(null);
     let idToken = '';
@@ -373,7 +445,7 @@ export default function CreateScreen() {
           Authorization: idToken ? `Bearer ${idToken}` : '',
         },
         body: JSON.stringify({
-          thumbnail: "", // Puedes agregar un campo para thumbnail si lo deseas
+          thumbnail: selectedImageUrl, // Enviar la URL de la imagen seleccionada
         }),
       });
       if (!publishResp.ok) {
@@ -398,7 +470,7 @@ export default function CreateScreen() {
     } finally {
       setIsPublishing(false);
     }
-  }, [draftFinal, outline, isWeb]);
+  }, [draftFinal, outline, isWeb, selectedImageUrl]); // Añadimos selectedImageUrl como dependencia
   // Renderers y UI se mantienen igual que tenías, con formulario inicial ocultándose cuando hay módulos/draftFinal.
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
@@ -425,23 +497,19 @@ export default function CreateScreen() {
           </View>
         </ScrollView>
         <View style={styles.sidebarFooter}>
-          <View style={styles.userInfo}>
-            <View style={styles.userAvatar}>
-              <TouchableOpacity style={styles.profileButton}>
-                <Image 
-                  source={{ uri: profile?.avatar || undefined }} 
-                  style={styles.webAvatarEmail} 
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.userText}>
-              <Text style={styles.userName}>
+          <View style={styles.sidebarUser}>
+            <Image
+              source={{ uri: profile?.avatar || undefined }}
+              style={styles.sidebarAvatar}
+            />
+            <View style={styles.sidebarText}>
+              <Text style={styles.sidebarName}>
                 {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
               </Text>
-              <Text style={styles.userEmail}>{profile?.email ?? ''}</Text>
+              <Text style={styles.sidebarEmail}>{profile?.email ?? ''}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <LogOut size={20} color={VibrantColors.danger} />
           </TouchableOpacity>
         </View>
@@ -536,6 +604,43 @@ export default function CreateScreen() {
                   textAlignVertical="top"
                 />
               </View>
+              {/* Selector de imagen para web */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Imagen del Curso *</Text>
+                <Text style={styles.labelSubtext}>
+                  Selecciona una imagen representativa para tu curso
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowImagePicker(true);
+                    // Si no hay término de búsqueda, usar el título del curso
+                    if (!searchTerm && title) {
+                      setSearchTerm(title);
+                    }
+                  }}
+                  style={styles.imagePickerButtonWeb}
+                >
+                  {selectedImageUrl ? (
+                    <View style={styles.imagePreviewContainer}>
+                      <Image source={{ uri: selectedImageUrl }} style={styles.imagePreview} />
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={(e) => {
+                          e.stopPropagation(); // Evitar abrir el modal
+                          setSelectedImageUrl(null);
+                        }}
+                      >
+                        <X size={16} color={VibrantColors.surface} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.imagePlaceholder}>
+                      <ImageIcon size={24} color={VibrantColors.textSecondary} />
+                      <Text style={styles.imagePickerText}>Seleccionar imagen</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
                 style={[
                   styles.generateButton,
@@ -565,6 +670,48 @@ export default function CreateScreen() {
             </View>
           </View>
         )}
+        <Modal visible={showImagePicker} animationType="slide">
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={styles.searchBar}>
+              <TextInput
+                placeholder="Buscar imágenes..."
+                value={searchTerm}
+                onChangeText={setSearchTerm}
+                style={styles.searchInput}
+              />
+              <TouchableOpacity onPress={() => setShowImagePicker(false)}>
+                <Text style={{ marginLeft: 16 }}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={imageResults}
+              keyExtractor={item => item.id}
+              numColumns={4} // 4 columnas en web
+              columnWrapperStyle={{
+                justifyContent: 'space-between',
+                marginBottom: getSpacing('md'),
+              }}
+              contentContainerStyle={{ padding: getSpacing('sm') }}
+              onEndReached={fetchMore}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={loadingMore ? <ActivityIndicator /> : null}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedImageUrl(item.urls.small);
+                    setShowImagePicker(false);
+                  }}
+                  style={styles.imageItemWeb}
+                >
+                  <Image
+                    source={{ uri: item.urls.small }}
+                    style={styles.imageThumbnailWeb}
+                  />
+                </TouchableOpacity>
+              )}
+            />
+          </SafeAreaView>
+        </Modal>
         {(anyModuleReceived || draftFinal) && (
           <View style={[styles.webContentCard, styles.webContentCardCompact]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -588,6 +735,24 @@ export default function CreateScreen() {
             {modules.map((mod, idx) => (
               <ModuleCard key={idx} module={mod} index={idx} />
             ))}
+            {/* Mostrar la imagen seleccionada en la sección de resultados */}
+            {selectedImageUrl && (
+              <View style={styles.selectedImageContainer}>
+                <Text style={styles.label}>Imagen seleccionada:</Text>
+                <View style={styles.imagePreviewWrapper}>
+                  <Image
+                    source={{ uri: selectedImageUrl }}
+                    style={styles.imagePreviewCard}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => setSelectedImageUrl(null)}
+                  >
+                    <X size={16} color={VibrantColors.surface} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
             {/* Botón de publicar curso */}
             <TouchableOpacity
               style={[
@@ -596,7 +761,7 @@ export default function CreateScreen() {
                 styles.publishButtonCompact,
               ]}
               onPress={handlePublishCourse}
-              disabled={isPublishing}
+              disabled={isPublishing || !selectedImageUrl} // Desactivar si no hay imagen
             >
               <View style={styles.publishButtonContent}>
                 <Text style={styles.publishButtonText}>
@@ -684,6 +849,43 @@ export default function CreateScreen() {
               textAlignVertical="top"
             />
           </View>
+          {/* Selector de imagen para móvil */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Imagen del Curso *</Text>
+            <Text style={styles.labelSubtext}>
+              Selecciona una imagen representativa para tu curso
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowImagePicker(true);
+                // Si no hay término de búsqueda, usar el título del curso
+                if (!searchTerm && title) {
+                  setSearchTerm(title);
+                }
+              }}
+              style={styles.imagePickerButtonMobile}
+            >
+              {selectedImageUrl ? (
+                <View style={styles.imagePreviewContainer}>
+                  <Image source={{ uri: selectedImageUrl }} style={styles.imagePreview} />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={(e) => {
+                      e.stopPropagation(); // Evitar abrir el modal
+                      setSelectedImageUrl(null);
+                    }}
+                  >
+                    <X size={16} color={VibrantColors.surface} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <ImageIcon size={24} color={VibrantColors.textSecondary} />
+                  <Text style={styles.imagePickerText}>Seleccionar imagen</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
             onPress={handleGenerateCourse}
@@ -698,7 +900,8 @@ export default function CreateScreen() {
               <Text style={styles.generateButtonText}>
                 {isGenerating ? 'Generando Curso...' : 'Generar Curso con IA'}
               </Text>
-              {!isGenerating && <ArrowRight size={20} color={VibrantColors.surface} />}
+              {!isGenerating && <ArrowRight size={20} color={VibrantColors.surface} />
+}
             </View>
           </TouchableOpacity>
           {error && (
@@ -720,6 +923,48 @@ export default function CreateScreen() {
           </View>
         </View>
       )}
+      <Modal visible={showImagePicker} animationType="slide">
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={styles.searchBar}>
+            <TextInput
+              placeholder="Buscar imágenes..."
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              style={styles.searchInput}
+            />
+            <TouchableOpacity onPress={() => setShowImagePicker(false)}>
+              <Text style={{ marginLeft: 16 }}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={imageResults}
+            keyExtractor={item => item.id}
+            numColumns={3}
+            columnWrapperStyle={{
+              justifyContent: 'space-between',
+              marginBottom: getSpacing('sm'),
+            }}
+            contentContainerStyle={{ padding: getSpacing('sm') }}
+            onEndReached={fetchMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={loadingMore ? <ActivityIndicator /> : null}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedImageUrl(item.urls.small)
+                  setShowImagePicker(false)
+                }}
+                style={styles.imageItem}
+              >
+                <Image
+                  source={{ uri: item.urls.small }}
+                  style={styles.imageThumbnail}
+                />
+              </TouchableOpacity>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
       {(anyModuleReceived || draftFinal) && (
         <View style={[styles.resultContainer, { marginHorizontal: getSpacing('lg') }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -743,6 +988,24 @@ export default function CreateScreen() {
           {modules.map((mod, idx) => (
             <ModuleCard key={idx} module={mod} index={idx} />
           ))}
+          {/* Mostrar la imagen seleccionada en la sección de resultados */}
+          {selectedImageUrl && (
+            <View style={styles.selectedImageContainer}>
+              <Text style={styles.label}>Imagen seleccionada:</Text>
+              <View style={styles.imagePreviewWrapper}>
+                <Image
+                  source={{ uri: selectedImageUrl }}
+                  style={styles.imagePreviewCard}
+                />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => setSelectedImageUrl(null)}
+                >
+                  <X size={16} color={VibrantColors.surface} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           {/* Botón de publicar curso */}
           <TouchableOpacity
             style={[
@@ -750,7 +1013,7 @@ export default function CreateScreen() {
               isPublishing && styles.publishButtonDisabled,
             ]}
             onPress={handlePublishCourse}
-            disabled={isPublishing}
+            disabled={isPublishing || !selectedImageUrl} // Desactivar si no hay imagen
           >
             <View style={styles.publishButtonContent}>
               <Text style={styles.publishButtonText}>
@@ -1254,4 +1517,136 @@ const styles = StyleSheet.create({
     fontSize: getFontSize('md'),
     fontWeight: '600',
   },
+  sidebarUser: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: getSpacing('md'),
+  },
+  sidebarAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  sidebarText: {
+    flex: 1,
+  },
+  sidebarName: {
+    fontSize: getFontSize('sm'),
+    fontWeight: '600',
+    color: VibrantColors.text,
+    marginBottom: 2,
+  },
+  sidebarEmail: {
+    fontSize: getFontSize('xs'),
+    color: VibrantColors.textSecondary,
+  },
+  // Estilos para el selector de imagen
+  imagePickerButtonWeb: {
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
+    borderRadius: 12,
+    padding: getSpacing('md'),
+    backgroundColor: VibrantColors.surface,
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePickerButtonMobile: {
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
+    borderRadius: 12,
+    padding: getSpacing('md'),
+    backgroundColor: VibrantColors.surface,
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+  },
+  imagePickerText: {
+    marginTop: getSpacing('sm'),
+    color: VibrantColors.textSecondary,
+    fontWeight: '500',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    alignItems: 'center',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+  },
+  imagePreviewLarge: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: VibrantColors.danger,
+    borderRadius: 12,
+    padding: 4,
+  },
+  selectedImagePreviewContainer: {
+    marginTop: getSpacing('md'),
+    marginBottom: getSpacing('md'),
+  },
+  // Estilos para el modal de imágenes
+  searchBar: {
+    flexDirection: 'row',
+    padding: getSpacing('md'),
+    borderBottomWidth: 1,
+    borderColor: VibrantColors.borderLight,
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: VibrantColors.borderLight,
+    borderRadius: 8,
+    padding: getSpacing('sm'),
+  },
+  imageItem: {
+    flex: 1,
+    margin: 4,
+    aspectRatio: 1,
+  },
+  imageThumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  selectedImageContainer: {
+    marginTop: getSpacing('md'),
+    marginBottom: getSpacing('md'),
+    alignItems: 'center',
+  },
+  imagePreviewWrapper: {
+    position: 'relative',
+    width: CARD_WIDTH,
+    height: CARD_IMAGE_HEIGHT,
+  },
+  imagePreviewCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  imageItemWeb: {
+    width: '23%', // Ancho para 4 columnas con espacio entre ellas
+    marginBottom: getSpacing('md'),
+    aspectRatio: 4/3,
+  },
+  imageThumbnailWeb: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  
 });

@@ -147,23 +147,19 @@ export default function ExploreScreen() {
           </View>
         </ScrollView>
         <View style={styles.sidebarFooter}>
-          <View style={styles.userInfo}>
-            <View style={styles.userAvatar}>
-              <TouchableOpacity style={styles.profileButton}>
-                <Image
-                  source={{ uri: profile?.avatar || undefined }}
-                  style={styles.webAvatarEmail}
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.userText}>
-              <Text style={styles.userName}>
+          <View style={styles.sidebarUser}>
+            <Image
+              source={{ uri: profile?.avatar || undefined }}
+              style={styles.sidebarAvatar}
+            />
+            <View style={styles.sidebarText}>
+              <Text style={styles.sidebarName}>
                 {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
               </Text>
-              <Text style={styles.userEmail}>{profile?.email ?? ''}</Text>
+              <Text style={styles.sidebarEmail}>{profile?.email ?? ''}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <LogOut size={20} color={VibrantColors.danger} />
           </TouchableOpacity>
         </View>
@@ -672,5 +668,29 @@ const styles = StyleSheet.create({
   mobileCoursesList: {
     paddingHorizontal: getSpacing('lg'),
     alignItems: 'center',
+  },
+  sidebarUser: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: getSpacing('md'),
+  },
+  sidebarAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  sidebarText: {
+    flex: 1,
+  },
+  sidebarName: {
+    fontSize: getFontSize('sm'),
+    fontWeight: '600',
+    color: VibrantColors.text,
+    marginBottom: 2,
+  },
+  sidebarEmail: {
+    fontSize: getFontSize('xs'),
+    color: VibrantColors.textSecondary,
   },
 });
