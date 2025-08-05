@@ -174,7 +174,11 @@ export default function DashboardScreen() {
         ) : (
           coursesToShow.map((course) => (
             <View key={course.id} style={styles.courseCardWrapper}>
-              <CourseCard course={course} onPress={() => {}} showProgress={showProgress} />
+              <CourseCard 
+                course={course} 
+                onPress={() => router.push(`/course/${course.id}`)} // Actualizado aquí
+                showProgress={showProgress} 
+              />
             </View>
           ))
         )}

@@ -27,6 +27,7 @@ export interface Enrollment {
 }
 
 export interface UserProfile {
+  id: string;
   name: string;
   email: string;
   avatar: string;
@@ -58,6 +59,7 @@ export const useUserProfile = () => {
       if (userDoc.exists()) {
         const data = userDoc.data();
         setProfile({
+          id: uid, // Añade el ID aquí
           name: data.name || '',
           email: data.email || '',
           avatar: data.avatar || '',
