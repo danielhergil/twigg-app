@@ -35,6 +35,7 @@ import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useUserProfile } from '../../utils/useUserProfile';
 const { width } = Dimensions.get('window');
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -168,6 +169,7 @@ const getBackendBaseUrl = () => {
 };
 // -----------------------------------------
 export default function CreateScreen() {
+  const { profile, achievements, enrollments, loading: userLoading } = useUserProfile();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState('12');
@@ -252,40 +254,36 @@ export default function CreateScreen() {
           if (done) break;
           lastActivity = Date.now();
           buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split('\n');
-          buffer = parts.pop() || '';
-          for (const part of parts) {
-            if (!part.trim()) continue;
-            const lines = part.split('\n');
+          // Cada evento SSE termina en '\n\n'
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';  // lo que quede tras el último '\n\n' lo guardamos para el próximo chunk
+          for (const eventText of events) {
+            const lines = eventText.split('\n');
             let eventType = '';
-            let dataLine = '';
+            let dataText = '';
             for (const line of lines) {
               if (line.startsWith('event:')) {
-                eventType = line.replace('event:', '').trim();
+                eventType = line.slice(6).trim();
               } else if (line.startsWith('data:')) {
-                dataLine += line.replace('data:', '').trim();
+                dataText += line.slice(5).trim();
               }
             }
-            if (!dataLine) continue;
+            if (!dataText) continue;
             try {
-              const parsed = JSON.parse(dataLine);
+              const parsed = JSON.parse(dataText);
               if (eventType === 'outline' && parsed.outline) {
-                partialOutline = parsed.outline;
                 setOutline(parsed.outline);
               } else if (eventType === 'module' && parsed.module) {
                 newModules.push(parsed.module);
                 setModules([...newModules]);
               } else if (eventType === 'done' && parsed.draft) {
-                finalDraft = parsed.draft;
                 setDraftFinal(parsed.draft);
                 if ((!newModules.length || !partialOutline) && parsed.draft.modules) {
                   setModules(parsed.draft.modules);
                 }
-              } else if (eventType === 'error') {
-                setError(parsed.error || 'Error desconocido');
               }
             } catch (e) {
-              console.warn('Error parseando chunk SSE:', e, dataLine);
+              console.warn('Error parseando evento SSE:', e, dataText);
             }
           }
         }
@@ -349,17 +347,14 @@ export default function CreateScreen() {
       }
     }
   }, [title, description, duration, level, isWeb]);
-  
   // Nueva función para publicar el curso
   const handlePublishCourse = useCallback(async () => {
     if (!draftFinal || !outline) {
       Alert.alert('Error', 'No hay curso para publicar');
       return;
     }
-    
     setIsPublishing(true);
     setError(null);
-    
     let idToken = '';
     try {
       const user = auth.currentUser;
@@ -369,7 +364,6 @@ export default function CreateScreen() {
     } catch (e: any) {
       console.warn('No se pudo obtener token:', e);
     }
-    
     try {
       // Llamada al backend para publicar el draft
       const publishResp = await fetch(`${getBackendBaseUrl()}/publish-draft/${draftFinal.id}`, {
@@ -382,12 +376,10 @@ export default function CreateScreen() {
           thumbnail: "", // Puedes agregar un campo para thumbnail si lo deseas
         }),
       });
-      
       if (!publishResp.ok) {
         const errorData = await publishResp.json();
         throw new Error(errorData.detail || 'Error al publicar el curso');
       }
-      
       const result = await publishResp.json();
       Alert.alert('Éxito', 'Curso publicado correctamente', [
         { 
@@ -397,7 +389,6 @@ export default function CreateScreen() {
           }
         }
       ]);
-      
       // Resetear todo después de publicar
       resetAll();
     } catch (e: any) {
@@ -408,7 +399,6 @@ export default function CreateScreen() {
       setIsPublishing(false);
     }
   }, [draftFinal, outline, isWeb]);
-  
   // Renderers y UI se mantienen igual que tenías, con formulario inicial ocultándose cuando hay módulos/draftFinal.
   const renderWebLayout = () => (
     <View style={styles.webContainer}>
@@ -438,12 +428,17 @@ export default function CreateScreen() {
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
               <TouchableOpacity style={styles.profileButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarEmail} />
+                <Image 
+                  source={{ uri: profile?.avatar || undefined }} 
+                  style={styles.webAvatarEmail} 
+                />
               </TouchableOpacity>
             </View>
             <View style={styles.userText}>
-              <Text style={styles.userName}>{dummyUser.name}</Text>
-              <Text style={styles.userEmail}>{dummyUser.email}</Text>
+              <Text style={styles.userName}>
+                {userLoading ? 'Cargando...' : profile?.name ?? 'Usuario'}
+              </Text>
+              <Text style={styles.userEmail}>{profile?.email ?? ''}</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -463,7 +458,10 @@ export default function CreateScreen() {
             </View>
             <View style={styles.webHeaderActions}>
               <TouchableOpacity style={styles.notificationButton}>
-                <Image source={{ uri: dummyUser.avatar }} style={styles.webAvatarWeb} />
+                <Image 
+                  source={{ uri: profile?.avatar || undefined }} 
+                  style={styles.webAvatarWeb} 
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -590,7 +588,6 @@ export default function CreateScreen() {
             {modules.map((mod, idx) => (
               <ModuleCard key={idx} module={mod} index={idx} />
             ))}
-            
             {/* Botón de publicar curso */}
             <TouchableOpacity
               style={[
@@ -624,7 +621,6 @@ export default function CreateScreen() {
       )}
     </View>
   );
-
   const renderMobileLayout = () => (
     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
@@ -747,7 +743,6 @@ export default function CreateScreen() {
           {modules.map((mod, idx) => (
             <ModuleCard key={idx} module={mod} index={idx} />
           ))}
-          
           {/* Botón de publicar curso */}
           <TouchableOpacity
             style={[
@@ -1223,7 +1218,6 @@ const styles = StyleSheet.create({
     zIndex: 50,
     gap: 8,
   },
-  
   // Estilos para el botón de publicar
   publishButton: {
     backgroundColor: VibrantColors.success,
